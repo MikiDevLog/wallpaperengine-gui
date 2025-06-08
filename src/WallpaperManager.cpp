@@ -8,6 +8,7 @@
 #include <QStandardPaths>
 #include <QRegularExpression>
 #include <QLoggingCategory>
+#include <QProcessEnvironment>
 
 Q_LOGGING_CATEGORY(wallpaperManager, "app.wallpaperManager")
 
@@ -280,13 +281,31 @@ bool WallpaperManager::launchWallpaper(const QString& wallpaperId, const QString
     
     // Build command line arguments
     QStringList args;
-    args << "--dir" << wallpaper.path;
     
-    // Add additional arguments (custom settings)
+    // Add additional arguments (custom settings) first
     args.append(additionalArgs);
+    
+    // Add assets directory if configured and not already present in additionalArgs
+    ConfigManager& configManager = ConfigManager::instance();
+    QString assetsDir = configManager.getAssetsDir();
+    if (!assetsDir.isEmpty() && !args.contains("--assets-dir")) {
+        args << "--assets-dir" << assetsDir;
+    }
+    
+    // Add wallpaper path as final argument (not with --dir flag)
+    args << wallpaper.path;
     
     emit outputReceived(QString("Launching wallpaper: %1").arg(wallpaper.name));
     emit outputReceived(QString("Command: %1 %2").arg(binaryPath, args.join(" ")));
+    
+    // Set working directory to the directory containing the binary
+    QFileInfo binaryInfo(binaryPath);
+    QString workingDir = binaryInfo.absolutePath();
+    m_wallpaperProcess->setWorkingDirectory(workingDir);
+    
+    // Preserve the current environment
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    m_wallpaperProcess->setProcessEnvironment(env);
     
     // Start process
     m_wallpaperProcess->start(binaryPath, args);
