@@ -5,8 +5,9 @@ GUI for the [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallp
 - Can get information about wallpaper based on workshop id using Steam API and store it. [You need to get API key for that](https://steamcommunity.com/dev/apikey) any domain name will do.
 - Support QT Themes for KDE users.
 - Somewhat usable in terms of design.
+- Restore previous state on restart.
 
-If you're using Fedora and KDE+Wayland (like me), you may have problems initializing GLEW for web wallpapers etc. I'll try to fix and test what's going on and report back. The app will report it as code 5.
+If you're using Fedora and KDE+Wayland (like me), you may have problems initializing GLEW for web wallpapers etc. I'll try to fix and test what's going on and report back. The app will report it as code 5. (there was a false alarm which I fixed but you need to check the engine log for any suspicious events.)
 You can manually check the linux-wallpaperengine call with the formatted string used by the app in the Engine Log tab of your terminal to see if it's a GUI or binary issue.
 
 ## Screenshots
