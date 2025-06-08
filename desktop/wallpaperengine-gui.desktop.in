@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Wallpaper Engine GUI
+GenericName=Wallpaper Manager
+Comment=Modern GUI for managing and configuring Wallpaper Engine wallpapers on Linux
+Icon=@ICON_INSTALL_DIR@/wallpaperengine-gui.png
+Exec=@CMAKE_INSTALL_PREFIX@/bin/wallpaperengine-gui
+Terminal=false
+StartupNotify=true
+Categories=Graphics;Photography;Utility;DesktopSettings;Qt;
+Keywords=wallpaper;desktop;background;steam;workshop;live;animated;dynamic;
+MimeType=application/json;
+StartupWMClass=wallpaperengine-gui
+X-Desktop-File-Install-Version=0.26

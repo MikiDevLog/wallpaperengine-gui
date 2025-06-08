@@ -1,0 +1,70 @@
+# Build directories
+build/
+build-*/
+*.user
+*.user.*
+
+# CMake
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+*.cmake
+
+# Qt
+*.qrc.depends
+*.qm
+*.prl
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+*_autogen/
+.qmake.*
+
+# C++
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+
+# Package files
+*.rpm
+*.deb
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+
+# IDE files
+.vscode/
+.idea/
+*.pro.user
+*.vcxproj.user
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Configuration (keep template files)
+config.ini
+!*.ini.template
+!*.ini.example
+
+# Cache files
+*.cache

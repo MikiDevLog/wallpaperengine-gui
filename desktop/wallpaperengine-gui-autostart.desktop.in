@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Wallpaper Engine GUI (Autostart)
+GenericName=Wallpaper Manager
+Comment=Auto-start wallpaper management at login
+Icon=@ICON_INSTALL_DIR@/wallpaperengine-gui.png
+Exec=@CMAKE_INSTALL_PREFIX@/bin/wallpaperengine-gui --minimized
+Terminal=false
+StartupNotify=false
+Categories=Graphics;Photography;Utility;
+Keywords=wallpaper;desktop;background;steam;workshop;autostart;
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+StartupWMClass=wallpaperengine-gui
