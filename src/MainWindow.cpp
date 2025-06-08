@@ -691,9 +691,11 @@ void MainWindow::onOutputReceived(const QString& output)
     m_outputTextEdit->update();
     QApplication::processEvents();
     
-    // Switch to output tab for important messages
+    // Switch to output tab for important messages (errors, launches, warnings)
+    // Don't switch for normal LOG messages which are just operational info
     if (output.contains("ERROR") || output.contains("FAILED") || output.contains("WARNING") ||
-        output.contains("✓") || output.contains("Launching") || output.contains("Process")) {
+        output.contains("Launching") || output.contains("Command:") || 
+        output.contains("process finished") || output.contains("Stopping")) {
         m_rightTabWidget->setCurrentIndex(1); // Output tab
     }
 }

@@ -9,6 +9,7 @@
 #include <QRegularExpression>
 #include <QLoggingCategory>
 #include <QProcessEnvironment>
+#include <QTimer>
 
 Q_LOGGING_CATEGORY(wallpaperManager, "app.wallpaperManager")
 
@@ -368,13 +369,41 @@ void WallpaperManager::onProcessFinished(int exitCode, QProcess::ExitStatus exit
 
 void WallpaperManager::onProcessError(QProcess::ProcessError error)
 {
+    // Only report actual errors, not normal operation
+    if (!m_wallpaperProcess) {
+        return;
+    }
+    
+    // For crash errors, delay the check to avoid false alarms during startup
+    if (error == QProcess::Crashed) {
+        // Use a single-shot timer to check the process state after a brief delay
+        // This prevents false crash reports during process initialization
+        QTimer::singleShot(100, this, [this, error]() {
+            if (!m_wallpaperProcess) {
+                return; // Process was cleaned up already
+            }
+            
+            // Only report crash if process actually exited abnormally
+            if (m_wallpaperProcess->state() == QProcess::NotRunning && 
+                m_wallpaperProcess->exitStatus() == QProcess::CrashExit) {
+                emit outputReceived("ERROR: Wallpaper process crashed");
+                emit errorOccurred("Wallpaper process crashed");
+            }
+            // If process is still running or exited normally, don't report as crash
+        });
+        return;
+    }
+    
+    // For other errors, check immediately but still verify process state
+    if (m_wallpaperProcess->state() == QProcess::Running) {
+        // Process is still running, this might be a false alarm
+        return;
+    }
+    
     QString errorString;
     switch (error) {
     case QProcess::FailedToStart:
         errorString = "Failed to start wallpaper process";
-        break;
-    case QProcess::Crashed:
-        errorString = "Wallpaper process crashed";
         break;
     case QProcess::Timedout:
         errorString = "Wallpaper process timed out";
@@ -404,7 +433,22 @@ void WallpaperManager::onProcessOutput()
         
         data = m_wallpaperProcess->readAllStandardError();
         if (!data.isEmpty()) {
-            emit outputReceived("STDERR: " + QString::fromUtf8(data).trimmed());
+            QString stderrOutput = QString::fromUtf8(data).trimmed();
+            
+            // Filter out normal mpv/wallpaper engine operational messages
+            // Only treat as errors if they contain actual error indicators
+            if (stderrOutput.contains("ERROR", Qt::CaseInsensitive) ||
+                stderrOutput.contains("FATAL", Qt::CaseInsensitive) ||
+                stderrOutput.contains("CRITICAL", Qt::CaseInsensitive) ||
+                (stderrOutput.contains("failed", Qt::CaseInsensitive) && 
+                 !stderrOutput.contains("Fullscreen detection not supported") &&
+                 !stderrOutput.contains("Failed to initialize GLEW"))) {
+                // This looks like an actual error
+                emit outputReceived("ERROR: " + stderrOutput);
+            } else {
+                // This is likely normal operational output (mpv logging, etc.)
+                emit outputReceived("LOG: " + stderrOutput);
+            }
         }
     }
 }
