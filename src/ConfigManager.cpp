@@ -4,6 +4,9 @@
 #include <QStyleFactory>
 #include <QApplication>
 #include <QDebug>
+#include <QLoggingCategory>
+
+Q_LOGGING_CATEGORY(configManager, "app.configManager")
 
 ConfigManager::ConfigManager(QObject* parent)
     : QObject(parent)
@@ -374,12 +377,12 @@ void ConfigManager::setScaling(const QString& scaling)
 
 bool ConfigManager::getSilent() const
 {
-    return m_settings->value("general/silent", false).toBool();
+    return m_settings->value("General/silent", false).toBool();
 }
 
 void ConfigManager::setSilent(bool silent)
 {
-    m_settings->setValue("general/silent", silent);
+    m_settings->setValue("General/silent", silent);
     m_settings->sync();
 }
 
@@ -533,23 +536,30 @@ QString ConfigManager::getConfigurationIssues() const
 
 QString ConfigManager::lastSelectedWallpaper() const
 {
-    return m_settings->value("general/last_wallpaper", "").toString();
+    QString result = m_settings->value("General/last_wallpaper", "").toString();
+    qCDebug(configManager) << "ConfigManager::lastSelectedWallpaper() returning:" << result;
+    return result;
 }
 
 void ConfigManager::setLastSelectedWallpaper(const QString& wallpaperId)
 {
-    m_settings->setValue("general/last_wallpaper", wallpaperId);
+    qCDebug(configManager) << "ConfigManager::setLastSelectedWallpaper() writing:" << wallpaperId;
+    m_settings->setValue("General/last_wallpaper", wallpaperId);
     m_settings->sync();
+    
+    // Verify the write
+    QString verify = m_settings->value("General/last_wallpaper", "").toString();
+    qCDebug(configManager) << "ConfigManager::setLastSelectedWallpaper() verification read:" << verify;
 }
 
 int ConfigManager::refreshInterval() const
 {
-    return m_settings->value("general/refresh_interval", 30).toInt();
+    return m_settings->value("General/refresh_interval", 30).toInt();
 }
 
 void ConfigManager::setRefreshInterval(int seconds)
 {
-    m_settings->setValue("general/refresh_interval", seconds);
+    m_settings->setValue("General/refresh_interval", seconds);
     m_settings->sync();
 }
 

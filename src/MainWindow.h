@@ -37,6 +37,7 @@ private slots:
     void showAbout();
     void onWallpaperSelected(const WallpaperInfo& wallpaper);
     void onWallpaperLaunched(const WallpaperInfo& wallpaper);
+    void onWallpaperStopped();
     void onRefreshProgress(int current, int total);
     void onRefreshFinished();
     void checkFirstRun();
@@ -86,6 +87,7 @@ private:
     // State
     QString m_currentWallpaperId;
     bool m_refreshing;
+    bool m_isClosing;
 };
 
 #endif // MAINWINDOW_H

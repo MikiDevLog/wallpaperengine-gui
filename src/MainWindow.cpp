@@ -44,6 +44,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_config(ConfigManager::instance())
     , m_wallpaperManager(new WallpaperManager(this))
     , m_refreshing(false)
+    , m_isClosing(false)
 {
     setWindowTitle("Wallpaper Engine GUI");
     setWindowIcon(QIcon(":/icons/wallpaper-engine.png"));
@@ -197,6 +198,10 @@ void MainWindow::createCentralWidget()
     // wallpaper manager → output log
     connect(m_wallpaperManager, &WallpaperManager::outputReceived,
             this, &MainWindow::onOutputReceived);
+    
+    // wallpaper manager → clear last wallpaper on stop
+    connect(m_wallpaperManager, &WallpaperManager::wallpaperStopped,
+            this, &MainWindow::onWallpaperStopped);
 
     // initial splitter sizing
     m_splitter->setSizes({840, 360});
@@ -224,6 +229,7 @@ void MainWindow::saveSettings()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    m_isClosing = true;
     saveSettings();
     event->accept();
 }
@@ -291,15 +297,33 @@ void MainWindow::initializeWithValidConfig()
     m_statusLabel->setText("Initializing... Loading wallpapers");
     QTimer::singleShot(500, this, &MainWindow::refreshWallpapers);
     
-    // TODO: Load and launch last selected wallpapers with their settings
+    // Auto-restore last selected wallpaper
     QString lastWallpaper = m_config.lastSelectedWallpaper();
+    qCDebug(mainWindow) << "Checking for last wallpaper to restore. Found:" << (lastWallpaper.isEmpty() ? "NONE" : lastWallpaper);
     if (!lastWallpaper.isEmpty()) {
         qCInfo(mainWindow) << "Will restore last wallpaper:" << lastWallpaper;
         // Schedule wallpaper restoration after refresh completes
         QTimer::singleShot(2000, this, [this, lastWallpaper]() {
             // This will be called after refresh hopefully completes
-            // Implementation for launching wallpaper can be added here
-            qCDebug(mainWindow) << "TODO: Restore wallpaper:" << lastWallpaper;
+            qCDebug(mainWindow) << "Attempting to restore wallpaper:" << lastWallpaper;
+            
+            // Find the wallpaper by ID
+            WallpaperInfo wallpaperToRestore = m_wallpaperManager->getWallpaperById(lastWallpaper);
+            if (!wallpaperToRestore.id.isEmpty()) {
+                qCInfo(mainWindow) << "Found wallpaper to restore:" << wallpaperToRestore.name;
+                
+                // Update the UI to show the selected wallpaper
+                if (m_wallpaperPreview) {
+                    m_wallpaperPreview->selectWallpaper(wallpaperToRestore.id);
+                }
+                
+                // Launch the wallpaper automatically
+                onWallpaperLaunched(wallpaperToRestore);
+            } else {
+                qCWarning(mainWindow) << "Could not find wallpaper with ID:" << lastWallpaper;
+                // Clear the invalid wallpaper ID from config
+                m_config.setLastSelectedWallpaper("");
+            }
         });
     }
 }
@@ -617,6 +641,15 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
         if (success) {
             m_statusLabel->setText(QString("Launched: %1").arg(wallpaper.name));
             qCInfo(mainWindow) << "Successfully launched wallpaper:" << wallpaper.name;
+            
+            // Save the wallpaper ID as the last selected wallpaper for auto-restore on next launch
+            qCDebug(mainWindow) << "About to save wallpaper ID as last selected:" << wallpaper.id;
+            m_config.setLastSelectedWallpaper(wallpaper.id);
+            qCDebug(mainWindow) << "Saved last selected wallpaper ID:" << wallpaper.id;
+            
+            // Verify it was saved
+            QString verification = m_config.lastSelectedWallpaper();
+            qCDebug(mainWindow) << "Verification read back:" << verification;
         } else {
             QString errorMsg = QString("Failed to launch wallpaper: %1").arg(wallpaper.name);
             qCWarning(mainWindow) << errorMsg;
@@ -644,6 +677,22 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
     }
     
     qCDebug(mainWindow) << "onWallpaperLaunched - END:" << wallpaper.name;
+}
+
+void MainWindow::onWallpaperStopped()
+{
+    qCDebug(mainWindow) << "Wallpaper stopped - isClosing:" << m_isClosing;
+    
+    // Only clear the last selected wallpaper if this is a manual stop, not application exit
+    if (!m_isClosing) {
+        qCDebug(mainWindow) << "Manual stop - clearing last selected wallpaper";
+        m_config.setLastSelectedWallpaper("");
+    } else {
+        qCDebug(mainWindow) << "Application closing - preserving last selected wallpaper";
+    }
+    
+    // Update status
+    m_statusLabel->setText("Wallpaper stopped");
 }
 
 void MainWindow::updateStatusBar()
