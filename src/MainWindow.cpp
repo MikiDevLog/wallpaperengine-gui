@@ -585,6 +585,21 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
                     if (settings["disableParallax"].toBool()) additionalArgs << "--disable-parallax";
                     if (settings["noFullscreenPause"].toBool()) additionalArgs << "--no-fullscreen-pause";
                 }
+            } else {
+                // No settings file exists, apply default values that are shown in GUI
+                // This ensures the displayed defaults are actually applied on first launch
+                
+                // Volume default is 15% - apply it explicitly
+                additionalArgs << "--volume" << "15";
+                
+                // FPS default is 30 - apply it explicitly  
+                additionalArgs << "--fps" << "30";
+                
+                // Screen root default is HDMI-A-1 - apply it explicitly
+                additionalArgs << "--screen-root" << "HDMI-A-1";
+                
+                // Other defaults (silent=false, scaling=default, clamping=clamp) don't need explicit args
+                // as they are the wallpaper engine's own defaults
             }
         }
         
