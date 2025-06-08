@@ -123,6 +123,10 @@ public:
     void setLastSelectedWallpaper(const QString& wallpaperId);
     int refreshInterval() const;
     void setRefreshInterval(int seconds);
+    
+    // System tray settings
+    bool showTrayWarning() const;
+    void setShowTrayWarning(bool show);
 
     // Steam API settings
     QString steamApiKey() const;

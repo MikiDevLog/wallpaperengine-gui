@@ -588,12 +588,23 @@ void ConfigManager::setUseSteamApi(bool use)
 
 QDateTime ConfigManager::lastApiUpdate() const
 {
-    QString dateStr = m_settings->value("steam/last_api_update", "").toString();
-    return QDateTime::fromString(dateStr, Qt::ISODate);
+    return m_settings->value("steam_api/last_update").toDateTime();
 }
 
 void ConfigManager::setLastApiUpdate(const QDateTime& dateTime)
 {
-    m_settings->setValue("steam/last_api_update", dateTime.toString(Qt::ISODate));
+    m_settings->setValue("steam_api/last_update", dateTime);
+    m_settings->sync();
+}
+
+// System tray settings
+bool ConfigManager::showTrayWarning() const
+{
+    return m_settings->value("ui/show_tray_warning", true).toBool();
+}
+
+void ConfigManager::setShowTrayWarning(bool show)
+{
+    m_settings->setValue("ui/show_tray_warning", show);
     m_settings->sync();
 }

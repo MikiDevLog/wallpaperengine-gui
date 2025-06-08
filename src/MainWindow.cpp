@@ -26,6 +26,13 @@
 #include <QDateTime>
 #include <QFileDialog>
 #include <QLoggingCategory>
+#include <QSystemTrayIcon>
+#include <QMenu>
+#include <QAction>
+#include <QPainter>
+#include <QPixmap>
+#include <QFile>
+#include <QCheckBox>
 
 Q_LOGGING_CATEGORY(mainWindow, "app.mainwindow")
 
@@ -45,11 +52,18 @@ MainWindow::MainWindow(QWidget *parent)
     , m_wallpaperManager(new WallpaperManager(this))
     , m_refreshing(false)
     , m_isClosing(false)
+    , m_startMinimized(false)
+    , m_systemTrayIcon(nullptr)
+    , m_trayMenu(nullptr)
+    , m_showAction(nullptr)
+    , m_hideAction(nullptr)
+    , m_quitAction(nullptr)
 {
     setWindowTitle("Wallpaper Engine GUI");
-    setWindowIcon(QIcon(":/icons/wallpaper-engine.png"));
+    setWindowIcon(QIcon(":/icons/icons/wallpaper.png"));
     
     setupUI();
+    setupSystemTray();
     loadSettings();
     
     // Check for first run after UI is set up
@@ -229,9 +243,221 @@ void MainWindow::saveSettings()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    // If system tray is available and enabled, minimize to tray instead of closing
+    if (m_systemTrayIcon && m_systemTrayIcon->isVisible()) {
+        if (isVisible()) {
+            // Check if user wants to see the tray warning
+            if (m_config.showTrayWarning()) {
+                QMessageBox msgBox(this);
+                msgBox.setWindowTitle("Wallpaper Engine GUI");
+                msgBox.setIcon(QMessageBox::Information);
+                msgBox.setText("The application was minimized to the system tray.");
+                msgBox.setInformativeText("To restore the window, click the tray icon or use the context menu.");
+                
+                // Add "Don't warn me again" checkbox
+                QCheckBox *dontWarnCheckBox = new QCheckBox("Don't warn me again");
+                msgBox.setCheckBox(dontWarnCheckBox);
+                
+                msgBox.setStandardButtons(QMessageBox::Ok);
+                msgBox.exec();
+                
+                // Save the preference if user checked the box
+                if (dontWarnCheckBox->isChecked()) {
+                    m_config.setShowTrayWarning(false);
+                    qCInfo(mainWindow) << "User disabled tray warning notifications";
+                }
+            }
+            
+            hideToTray();
+            event->ignore();
+            return;
+        }
+    }
+    
+    // Normal application exit
     m_isClosing = true;
     saveSettings();
     event->accept();
+}
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::WindowStateChange) {
+        if (isMinimized() && m_systemTrayIcon && m_systemTrayIcon->isVisible()) {
+            hideToTray();
+            event->ignore();
+            return;
+        }
+    }
+    QMainWindow::changeEvent(event);
+}
+
+void MainWindow::setStartMinimized(bool minimized)
+{
+    m_startMinimized = minimized;
+    if (minimized && m_systemTrayIcon && m_systemTrayIcon->isVisible()) {
+        QTimer::singleShot(100, this, &MainWindow::hideToTray);
+    }
+}
+
+void MainWindow::setupSystemTray()
+{
+    // Check if system tray is available
+    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
+        qCWarning(mainWindow) << "System tray is not available on this system";
+        return;
+    }
+    
+    // Create system tray icon
+    m_systemTrayIcon = new QSystemTrayIcon(this);
+    
+    // Use the wallpaper.png icon from resources
+    QIcon trayIcon(":/icons/icons/wallpaper.png");
+    
+    // Debug: Check if icon loaded successfully
+    qCInfo(mainWindow) << "Attempting to load system tray icon from resources: :/icons/icons/wallpaper.png";
+    qCInfo(mainWindow) << "Icon is null:" << trayIcon.isNull();
+    qCInfo(mainWindow) << "Available icon sizes:" << trayIcon.availableSizes();
+    
+    // Check if icon loaded properly by testing available sizes
+    if (trayIcon.isNull() || trayIcon.availableSizes().isEmpty()) {
+        qCWarning(mainWindow) << "Resource icon failed to load, trying window icon fallback";
+        trayIcon = windowIcon();
+        
+        if (trayIcon.isNull() || trayIcon.availableSizes().isEmpty()) {
+            qCWarning(mainWindow) << "Window icon also failed, creating fallback icon";
+            // Fallback to a simple colored circle if no icon is available
+            QPixmap pixmap(22, 22);  // Slightly larger for better visibility
+            pixmap.fill(Qt::transparent);
+            QPainter painter(&pixmap);
+            painter.setRenderHint(QPainter::Antialiasing);
+            painter.setBrush(QColor(52, 152, 219)); // Nice blue color
+            painter.setPen(Qt::NoPen);
+            painter.drawEllipse(3, 3, 16, 16);
+            trayIcon = QIcon(pixmap);
+            qCInfo(mainWindow) << "Created fallback blue circle icon";
+        } else {
+            qCInfo(mainWindow) << "Using window icon for system tray";
+        }
+    } else {
+        qCInfo(mainWindow) << "Successfully loaded wallpaper.png icon for system tray";
+    }
+    
+    m_systemTrayIcon->setIcon(trayIcon);
+    
+    // Create tray menu
+    createTrayMenu();
+    
+    // Set tooltip
+    m_systemTrayIcon->setToolTip("Wallpaper Engine GUI");
+    
+    // Connect signals
+    connect(m_systemTrayIcon, &QSystemTrayIcon::activated,
+            this, &MainWindow::onTrayIconActivated);
+    
+    // Show the tray icon
+    m_systemTrayIcon->show();
+    
+    qCInfo(mainWindow) << "System tray icon initialized successfully";
+}
+
+void MainWindow::createTrayMenu()
+{
+    m_trayMenu = new QMenu(this);
+    
+    // Show/Hide action
+    m_showAction = new QAction("Show Window", this);
+    connect(m_showAction, &QAction::triggered, this, &MainWindow::showWindow);
+    m_trayMenu->addAction(m_showAction);
+    
+    m_hideAction = new QAction("Hide Window", this);
+    connect(m_hideAction, &QAction::triggered, this, &MainWindow::hideToTray);
+    m_trayMenu->addAction(m_hideAction);
+    
+    m_trayMenu->addSeparator();
+    
+    // Add some useful actions
+    QAction *refreshAction = new QAction("Refresh Wallpapers", this);
+    connect(refreshAction, &QAction::triggered, this, &MainWindow::refreshWallpapers);
+    m_trayMenu->addAction(refreshAction);
+    
+    QAction *settingsAction = new QAction("Settings", this);
+    connect(settingsAction, &QAction::triggered, this, [this]() {
+        showWindow();
+        openSettings();
+    });
+    m_trayMenu->addAction(settingsAction);
+    
+    m_trayMenu->addSeparator();
+    
+    // Quit action
+    m_quitAction = new QAction("Quit", this);
+    connect(m_quitAction, &QAction::triggered, this, &MainWindow::quitApplication);
+    m_trayMenu->addAction(m_quitAction);
+    
+    // Set the menu
+    m_systemTrayIcon->setContextMenu(m_trayMenu);
+}
+
+void MainWindow::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
+{
+    switch (reason) {
+    case QSystemTrayIcon::Trigger:
+    case QSystemTrayIcon::DoubleClick:
+        if (isVisible() && !isMinimized()) {
+            hideToTray();
+        } else {
+            showWindow();
+        }
+        break;
+    case QSystemTrayIcon::MiddleClick:
+        showWindow();
+        break;
+    default:
+        break;
+    }
+}
+
+void MainWindow::showWindow()
+{
+    show();
+    raise();
+    activateWindow();
+    setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+    
+    // Update menu actions
+    if (m_showAction && m_hideAction) {
+        m_showAction->setEnabled(false);
+        m_hideAction->setEnabled(true);
+    }
+    
+    qCDebug(mainWindow) << "Window restored from system tray";
+}
+
+void MainWindow::hideToTray()
+{
+    hide();
+    
+    // Update menu actions
+    if (m_showAction && m_hideAction) {
+        m_showAction->setEnabled(true);
+        m_hideAction->setEnabled(false);
+    }
+    
+    qCDebug(mainWindow) << "Window hidden to system tray";
+}
+
+void MainWindow::quitApplication()
+{
+    m_isClosing = true;
+    
+    // Hide tray icon
+    if (m_systemTrayIcon) {
+        m_systemTrayIcon->hide();
+    }
+    
+    // Close application
+    QApplication::quit();
 }
 
 void MainWindow::checkFirstRun()

@@ -245,6 +245,10 @@ int main(int argc, char *argv[])
         "Use custom config file", "config");
     parser.addOption(configOption);
     
+    QCommandLineOption minimizedOption(QStringList() << "m" << "minimized",
+        "Start minimized to system tray");
+    parser.addOption(minimizedOption);
+    
     parser.process(app);
     
     qDebug() << "Command line arguments processed";
@@ -280,8 +284,16 @@ int main(int argc, char *argv[])
     // Create and show main window
     MainWindow window;
     
-    qDebug() << "Showing main window";
-    window.show();
+    // Check if application should start minimized
+    bool startMinimized = parser.isSet(minimizedOption);
+    window.setStartMinimized(startMinimized);
+    
+    qDebug() << "Showing main window" << (startMinimized ? "(minimized)" : "");
+    if (!startMinimized) {
+        window.show();
+    } else {
+        qCInfo(appMain) << "Starting minimized to system tray";
+    }
     
     qCInfo(appMain) << "Application started successfully";
     

@@ -13,6 +13,9 @@
 #include <QProgressBar>
 #include <QTextEdit>
 #include <QTabWidget>
+#include <QSystemTrayIcon>
+#include <QMenu>
+#include <QAction>
 
 class WallpaperPreview;
 class PropertiesPanel;
@@ -27,9 +30,13 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+    
+    // Methods for system tray
+    void setStartMinimized(bool minimized);
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void changeEvent(QEvent *event) override;
 
 private slots:
     void openSettings();
@@ -46,6 +53,12 @@ private slots:
     void onOutputReceived(const QString& output);
     void clearOutput();
     void saveOutput();
+    
+    // System tray slots
+    void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason);
+    void showWindow();
+    void hideToTray();
+    void quitApplication();
 
 private:
     void setupUI();
@@ -57,6 +70,10 @@ private:
     void saveSettings();
     void updateStatusBar();
     void showFirstRunDialog();
+    
+    // System tray methods
+    void setupSystemTray();
+    void createTrayMenu();
 
     // UI Components
     QSplitter *m_splitter;
@@ -88,6 +105,14 @@ private:
     QString m_currentWallpaperId;
     bool m_refreshing;
     bool m_isClosing;
+    bool m_startMinimized;
+    
+    // System tray
+    QSystemTrayIcon *m_systemTrayIcon;
+    QMenu *m_trayMenu;
+    QAction *m_showAction;
+    QAction *m_hideAction;
+    QAction *m_quitAction;
 };
 
 #endif // MAINWINDOW_H

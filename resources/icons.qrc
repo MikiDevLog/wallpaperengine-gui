@@ -1,6 +1,7 @@
 <RCC>
     <qresource prefix="/icons">
         <file>icons/wallpaper-engine.png</file>
+        <file>icons/wallpaper.png</file>
         <file>icons/refresh.png</file>
         <file>icons/settings.png</file>
         <file>icons/play.png</file>
