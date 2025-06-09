@@ -15,6 +15,7 @@
 #include <QMap>
 #include <QVariant>
 #include <QTabWidget>
+#include <QMessageBox>
 
 // These were missing or in wrong order - add them before the WallpaperSettings struct
 #include <QCheckBox>
@@ -72,6 +73,7 @@ signals:
     void launchWallpaper(const WallpaperInfo& wallpaper);
     void propertiesChanged(const QString& wallpaperId, const QJsonObject& properties);
     void settingsChanged(const QString& wallpaperId, const WallpaperSettings& settings);
+    void wallpaperSelectionRejected(const QString& wallpaperId);
 
 private slots:
     void onPropertyChanged();
@@ -83,6 +85,9 @@ private slots:
     void onSettingChanged();
     void onSaveSettingsClicked();
     void onScreenRootChanged(const QString& screenRoot);
+    
+    // New slots for unsaved changes handling
+    void onTabChangeRequested(int index);
 
 private:
     void setupUI();
@@ -94,7 +99,7 @@ private:
     QPixmap scalePixmapKeepAspectRatio(const QPixmap& original, const QSize& targetSize);
     void setPlaceholderPreview(const QString& text);
     QJsonObject saveCurrentProperties();
-    QJsonObject loadPropertiesFromProjectJson(const QString& wallpaperId);
+        QJsonObject loadPropertiesFromProjectJson(const QString& wallpaperId);
     bool loadCachedProperties(const QString& wallpaperId);
     bool saveCachedProperties(const QString& wallpaperId, const QJsonObject& properties);
     bool savePropertiesToProjectJson(const QString& wallpaperId, const QJsonObject& properties);
@@ -110,6 +115,12 @@ private:
     bool saveWallpaperSettings(const QString& wallpaperId);
     QString getSettingsFilePath(const QString& wallpaperId);
     QStringList getAvailableScreens() const;
+    
+    // New methods for unsaved changes handling
+    bool hasUnsavedChanges() const;
+    bool showUnsavedChangesDialog();
+    void resetUnsavedChanges();
+    bool checkUnsavedChangesBeforeAction();
     
     // UI Components - reordered to match constructor initialization order
     QLabel* m_nameLabel;
@@ -172,6 +183,10 @@ private:
     bool m_propertiesModified;
     bool m_settingsModified;
     bool m_isWallpaperRunning;
+    
+    // New member variables for unsaved changes handling
+    bool m_ignoreTabChange;
+    int m_pendingTabIndex;
     
     // Helper methods for Steam API data
     void updateSteamApiMetadata(const WallpaperInfo& wallpaper);

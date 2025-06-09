@@ -98,7 +98,7 @@ QStringList WallpaperSettings::toCommandLineArgs() const
 
 PropertiesPanel::PropertiesPanel(QWidget* parent)
     : QWidget(parent)
-    , m_nameLabel(new QLabel("No wallpaper selected"))
+    , m_nameLabel(new QLabel)
     , m_authorLabel(new QLabel)
     , m_typeLabel(new QLabel)
     , m_fileSizeLabel(new QLabel)
@@ -110,8 +110,8 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_previewLabel(new QLabel)
     , m_descriptionEdit(new QTextEdit)
     , m_launchButton(new QPushButton("Launch Wallpaper"))
-    , m_savePropertiesButton(new QPushButton("Save Properties"))
-    , m_resetPropertiesButton(new QPushButton("Reset Changes"))
+    , m_savePropertiesButton(new QPushButton("Save"))
+    , m_resetPropertiesButton(new QPushButton("Reset"))
     , m_propertiesWidget(nullptr)
     , m_scrollArea(new QScrollArea)
     , m_settingsWidget(nullptr)
@@ -140,6 +140,8 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_propertiesModified(false)
     , m_settingsModified(false)
     , m_isWallpaperRunning(false)
+    , m_ignoreTabChange(false)
+    , m_pendingTabIndex(-1)
 {
     setupUI();
     
@@ -149,7 +151,10 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     connect(m_saveSettingsButton, &QPushButton::clicked, this, &PropertiesPanel::onSaveSettingsClicked);
     connect(m_launchButton, &QPushButton::clicked, this, [this]() {
         if (!m_currentWallpaper.id.isEmpty()) {
-            emit launchWallpaper(m_currentWallpaper);
+            // Check for unsaved changes before launching
+            if (checkUnsavedChangesBeforeAction()) {
+                emit launchWallpaper(m_currentWallpaper);
+            }
         }
     });
     
@@ -181,6 +186,9 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
 void PropertiesPanel::setupUI()
 {
     m_innerTabWidget = new QTabWidget;
+    
+    // Connect tab change signal to check for unsaved changes
+    connect(m_innerTabWidget, &QTabWidget::currentChanged, this, &PropertiesPanel::onTabChangeRequested);
     
     // Info page (just the preview & basic info)
     QWidget* infoPage = new QWidget;
@@ -538,6 +546,16 @@ void PropertiesPanel::setupSettingsUI(QWidget* settingsTab)
 void PropertiesPanel::setWallpaper(const WallpaperInfo& wallpaper)
 {
     qCDebug(propertiesPanel) << "setWallpaper called for:" << wallpaper.name;
+    
+    // Check for unsaved changes before switching wallpapers
+    if (!m_currentWallpaper.id.isEmpty() && m_currentWallpaper.id != wallpaper.id) {
+        if (!checkUnsavedChangesBeforeAction()) {
+            // User chose to stay with current wallpaper, don't switch
+            // Emit signal to notify MainWindow that selection was rejected
+            emit wallpaperSelectionRejected(m_currentWallpaper.id);
+            return;
+        }
+    }
     
     m_currentWallpaper = wallpaper;
     
@@ -1811,4 +1829,92 @@ void PropertiesPanel::startPreviewAnimation()
         qCDebug(propertiesPanel) << "Starting preview animation";
         m_previewMovie->start();
     }
+}
+
+// Unsaved changes handling methods
+void PropertiesPanel::onTabChangeRequested(int index)
+{
+    if (m_ignoreTabChange) {
+        // Allow the tab change to proceed without checking
+        return;
+    }
+    
+    int currentIndex = m_innerTabWidget->currentIndex();
+    
+    // Check if we're leaving a tab with unsaved changes
+    bool hasUnsaved = false;
+    if (currentIndex == 1) { // Wallpaper Settings tab
+        hasUnsaved = m_propertiesModified;
+    } else if (currentIndex == 2) { // Engine Settings tab
+        hasUnsaved = m_settingsModified;
+    }
+    
+    if (hasUnsaved) {
+        // Store the requested tab index
+        m_pendingTabIndex = index;
+        
+        // Block the tab change temporarily
+        m_ignoreTabChange = true;
+        m_innerTabWidget->setCurrentIndex(currentIndex);
+        m_ignoreTabChange = false;
+        
+        // Show the confirmation dialog
+        if (showUnsavedChangesDialog()) {
+            // User chose to discard changes
+            resetUnsavedChanges();
+            
+            // Now allow the tab change
+            m_ignoreTabChange = true;
+            m_innerTabWidget->setCurrentIndex(index);
+            m_ignoreTabChange = false;
+        }
+        // If user chose to stay, do nothing (tab stays on current)
+        m_pendingTabIndex = -1;
+    }
+    // If no unsaved changes, allow tab change to proceed normally
+}
+
+bool PropertiesPanel::hasUnsavedChanges() const
+{
+    return m_propertiesModified || m_settingsModified;
+}
+
+bool PropertiesPanel::showUnsavedChangesDialog()
+{
+    QMessageBox msgBox;
+    msgBox.setWindowTitle("Unsaved Changes");
+    msgBox.setIcon(QMessageBox::Warning);
+    msgBox.setText("You have unsaved changes that will be lost.");
+    msgBox.setInformativeText("Do you want to discard your changes and continue?");
+    
+    QPushButton* discardButton = msgBox.addButton("Discard Changes", QMessageBox::DestructiveRole);
+    QPushButton* stayButton = msgBox.addButton("Stay Here", QMessageBox::RejectRole);
+    msgBox.setDefaultButton(stayButton);
+    
+    msgBox.exec();
+    
+    return msgBox.clickedButton() == discardButton;
+}
+
+void PropertiesPanel::resetUnsavedChanges()
+{
+    if (m_propertiesModified) {
+        // Reset properties to original values
+        onResetPropertiesClicked();
+    }
+    
+    if (m_settingsModified) {
+        // Reset settings to last saved values
+        loadWallpaperSettings(m_currentWallpaper.id);
+        m_settingsModified = false;
+        m_saveSettingsButton->setEnabled(false);
+    }
+}
+
+bool PropertiesPanel::checkUnsavedChangesBeforeAction()
+{
+    if (hasUnsavedChanges()) {
+        return showUnsavedChangesDialog();
+    }
+    return true; // No unsaved changes, proceed
 }

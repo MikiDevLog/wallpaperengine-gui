@@ -448,6 +448,10 @@ void MainWindow::createCentralWidget()
     connect(m_propertiesPanel, &PropertiesPanel::launchWallpaper,
             this, &MainWindow::onWallpaperLaunched);
 
+    // properties panel → wallpaper selection rejected due to unsaved changes
+    connect(m_propertiesPanel, &PropertiesPanel::wallpaperSelectionRejected,
+            this, &MainWindow::onWallpaperSelectionRejected);
+
     // wallpaper manager → output log
     connect(m_wallpaperManager, &WallpaperManager::outputReceived,
             this, &MainWindow::onOutputReceived);
@@ -1269,6 +1273,16 @@ void MainWindow::onWallpaperStopped()
     
     // Update status
     m_statusLabel->setText("Wallpaper stopped");
+}
+
+void MainWindow::onWallpaperSelectionRejected(const QString& wallpaperId)
+{
+    qCDebug(mainWindow) << "Wallpaper selection rejected due to unsaved changes, reverting to:" << wallpaperId;
+    
+    // Revert the wallpaper selection in the preview to the wallpaper that the user wants to keep
+    if (m_wallpaperPreview) {
+        m_wallpaperPreview->selectWallpaper(wallpaperId);
+    }
 }
 
 void MainWindow::updateStatusBar()

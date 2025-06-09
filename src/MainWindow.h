@@ -67,6 +67,7 @@ private slots:
     void onWallpaperSelected(const WallpaperInfo& wallpaper);
     void onWallpaperLaunched(const WallpaperInfo& wallpaper);
     void onWallpaperStopped();
+    void onWallpaperSelectionRejected(const QString& wallpaperId);
     void onRefreshProgress(int current, int total);
     void onRefreshFinished();
     void checkFirstRun();

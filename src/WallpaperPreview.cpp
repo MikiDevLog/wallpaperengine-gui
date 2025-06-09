@@ -1573,7 +1573,13 @@ void WallpaperPreview::selectWallpaper(const QString& wallpaperId)
 {
     for (WallpaperPreviewItem* item : m_currentPageItems) {
         if (item && item->wallpaperInfo().id == wallpaperId) {
-            onWallpaperItemClicked(item->wallpaperInfo());
+            // Update visual selection without emitting signal to avoid loops
+            if (m_selectedItem) {
+                m_selectedItem->setSelected(false);
+            }
+            
+            item->setSelected(true);
+            m_selectedItem = item;
             break;
         }
     }
