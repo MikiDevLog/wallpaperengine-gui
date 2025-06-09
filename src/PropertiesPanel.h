@@ -65,6 +65,7 @@ public:
     explicit PropertiesPanel(QWidget* parent = nullptr);
     
     void setWallpaper(const WallpaperInfo& wallpaper);
+    void setWallpaperManager(WallpaperManager* manager);
     void clear();
 
 signals:
@@ -157,6 +158,9 @@ private:
     // Current wallpaper
     WallpaperInfo m_currentWallpaper;
     WallpaperSettings m_currentSettings;
+    
+    // Wallpaper manager reference
+    WallpaperManager* m_wallpaperManager;
     
     // Animation support for preview
     QMovie* m_previewMovie;

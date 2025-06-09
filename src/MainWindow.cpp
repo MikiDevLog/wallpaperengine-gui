@@ -395,6 +395,9 @@ void MainWindow::createCentralWidget()
     m_propertiesPanel = new PropertiesPanel;
     m_splitter->addWidget(m_propertiesPanel);
 
+    // connect properties panel to manager for automatic restart functionality
+    m_propertiesPanel->setWallpaperManager(m_wallpaperManager);
+
     // Store a reference to the properties panel's inner tab widget
     m_rightTabWidget = m_propertiesPanel->m_innerTabWidget;
 

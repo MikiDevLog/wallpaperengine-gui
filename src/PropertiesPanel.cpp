@@ -132,6 +132,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_noFullscreenPauseCheckBox(new QCheckBox("Don't pause when apps go fullscreen"))
     , m_currentWallpaper()
     , m_currentSettings()
+    , m_wallpaperManager(nullptr)
     , m_previewMovie(nullptr)
     , m_propertyWidgets()
     , m_originalValues()
@@ -599,6 +600,11 @@ void PropertiesPanel::setWallpaper(const WallpaperInfo& wallpaper)
     qCDebug(propertiesPanel) << "setWallpaper completed for:" << wallpaper.name;
 }
 
+void PropertiesPanel::setWallpaperManager(WallpaperManager* manager)
+{
+    m_wallpaperManager = manager;
+}
+
 void PropertiesPanel::updatePreview(const WallpaperInfo& wallpaper)
 {
     qCDebug(propertiesPanel) << "updatePreview called for preview path:" << wallpaper.previewPath;
@@ -931,10 +937,8 @@ void PropertiesPanel::onSavePropertiesClicked()
             updateProperties(freshProperties);
         }
         
-        // If wallpaper is running, ask to restart it
-        if (m_isWallpaperRunning) {
-            restartWallpaperWithChanges();
-        }
+        // Automatically restart wallpaper if it's currently running and matches the modified wallpaper
+        restartWallpaperWithChanges();
     } else {
         qCWarning(propertiesPanel) << "Failed to save properties to project.json for wallpaper:" << m_currentWallpaper.id;
     }
@@ -949,10 +953,8 @@ void PropertiesPanel::onResetPropertiesClicked()
         // Reload the wallpaper to refresh the properties panel
         setWallpaper(m_currentWallpaper);
         
-        // If wallpaper is running, ask to restart it
-        if (m_isWallpaperRunning) {
-            restartWallpaperWithChanges();
-        }
+        // Automatically restart wallpaper if it's currently running and matches the modified wallpaper
+        restartWallpaperWithChanges();
     } else {
         qCWarning(propertiesPanel) << "Failed to reset properties from backup for wallpaper:" << m_currentWallpaper.id;
     }
@@ -989,6 +991,9 @@ void PropertiesPanel::onSaveSettingsClicked()
             m_settingsModified = false;
             m_saveSettingsButton->setEnabled(false);
             qCDebug(propertiesPanel) << "Settings saved successfully for wallpaper:" << m_currentWallpaper.id;
+            
+            // Automatically restart wallpaper if it's currently running and matches the modified wallpaper
+            restartWallpaperWithChanges();
         } else {
             qCWarning(propertiesPanel) << "Failed to save settings for wallpaper:" << m_currentWallpaper.id;
         }
@@ -1008,10 +1013,25 @@ void PropertiesPanel::restartWallpaperWithChanges()
         return;
     }
     
-    qCDebug(propertiesPanel) << "Restarting wallpaper with new changes:" << m_currentWallpaper.name;
+    // Check if wallpaper manager is available
+    if (!m_wallpaperManager) {
+        qCWarning(propertiesPanel) << "Cannot restart wallpaper: no wallpaper manager";
+        return;
+    }
     
-    // Emit the launch signal to restart the wallpaper with new settings
-    emit launchWallpaper(m_currentWallpaper);
+    // Only restart if the wallpaper is currently running and it's the same wallpaper being modified
+    if (m_wallpaperManager->isWallpaperRunning() && 
+        m_wallpaperManager->getCurrentWallpaper() == m_currentWallpaper.id) {
+        
+        qCDebug(propertiesPanel) << "Automatically restarting wallpaper with new changes:" << m_currentWallpaper.name;
+        
+        // Emit the launch signal to restart the wallpaper with new settings
+        emit launchWallpaper(m_currentWallpaper);
+    } else if (m_wallpaperManager->isWallpaperRunning()) {
+        qCDebug(propertiesPanel) << "Wallpaper is running but it's not the current wallpaper being modified - no restart needed";
+    } else {
+        qCDebug(propertiesPanel) << "No wallpaper is currently running - no restart needed";
+    }
 }
 
 bool PropertiesPanel::saveWallpaperSettings(const QString& wallpaperId)
