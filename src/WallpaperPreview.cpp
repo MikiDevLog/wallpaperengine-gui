@@ -4,6 +4,7 @@
 #include <QHBoxLayout>
 #include <QGridLayout>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QLabel>
 #include <QLineEdit>
 #include <QComboBox>
@@ -1571,6 +1572,7 @@ void WallpaperPreview::refreshWallpapers()
 
 void WallpaperPreview::selectWallpaper(const QString& wallpaperId)
 {
+    // First, try to find the wallpaper on the current page
     for (WallpaperPreviewItem* item : m_currentPageItems) {
         if (item && item->wallpaperInfo().id == wallpaperId) {
             // Update visual selection without emitting signal to avoid loops
@@ -1580,9 +1582,52 @@ void WallpaperPreview::selectWallpaper(const QString& wallpaperId)
             
             item->setSelected(true);
             m_selectedItem = item;
-            break;
+            
+            // Scroll to make the selected item visible
+            scrollToItem(item);
+            return; // Found on current page, we're done
         }
     }
+    
+    // If not found on current page, search through all filtered wallpapers
+    // and navigate to the correct page
+    QList<WallpaperInfo> allFiltered = getFilteredWallpapers();
+    for (int i = 0; i < allFiltered.size(); ++i) {
+        if (allFiltered[i].id == wallpaperId) {
+            // Found the wallpaper, calculate which page it's on
+            int targetPage = i / ITEMS_PER_PAGE;
+            
+            if (targetPage != m_currentPage) {
+                // Navigate to the correct page
+                qCDebug(wallpaperPreview) << "Navigating to page" << (targetPage + 1) << "to select wallpaper:" << wallpaperId;
+                m_currentPage = targetPage;
+                updateWallpaperGrid(); // This will load the new page and clear current selection
+                
+                // After the page loads, try to select the wallpaper again
+                QTimer::singleShot(100, this, [this, wallpaperId]() {
+                    // Try selecting on the new page
+                    for (WallpaperPreviewItem* item : m_currentPageItems) {
+                        if (item && item->wallpaperInfo().id == wallpaperId) {
+                            if (m_selectedItem) {
+                                m_selectedItem->setSelected(false);
+                            }
+                            item->setSelected(true);
+                            m_selectedItem = item;
+                            
+                            // Scroll to make the selected item visible
+                            scrollToItem(item);
+                            qCDebug(wallpaperPreview) << "Successfully selected wallpaper on new page:" << wallpaperId;
+                            break;
+                        }
+                    }
+                });
+            }
+            return; // Found the wallpaper (will be selected after page load)
+        }
+    }
+    
+    // Wallpaper not found in current filters - it might be filtered out
+    qCDebug(wallpaperPreview) << "Wallpaper not found in current view (may be filtered out):" << wallpaperId;
 }
 
 void WallpaperPreview::updateTheme()
@@ -1647,6 +1692,43 @@ void WallpaperPreview::cancelAllPendingOperations()
             item->cancelPendingOperations();
         }
     }
+}
+
+void WallpaperPreview::scrollToItem(WallpaperPreviewItem* item)
+{
+    if (!item || !m_scrollArea) {
+        return;
+    }
+    
+    // Get the item's position relative to the grid widget
+    QPoint itemPos = item->pos();
+    QSize itemSize = item->size();
+    
+    // Calculate the center of the item
+    QPoint itemCenter = itemPos + QPoint(itemSize.width() / 2, itemSize.height() / 2);
+    
+    // Get the scroll area's viewport size
+    QSize viewportSize = m_scrollArea->viewport()->size();
+    
+    // Calculate the desired scroll position to center the item in the viewport
+    int desiredX = itemCenter.x() - viewportSize.width() / 2;
+    int desiredY = itemCenter.y() - viewportSize.height() / 2;
+    
+    // Ensure the scroll position is within valid bounds
+    QScrollBar* hScrollBar = m_scrollArea->horizontalScrollBar();
+    QScrollBar* vScrollBar = m_scrollArea->verticalScrollBar();
+    
+    if (hScrollBar) {
+        desiredX = qMax(hScrollBar->minimum(), qMin(desiredX, hScrollBar->maximum()));
+        hScrollBar->setValue(desiredX);
+    }
+    
+    if (vScrollBar) {
+        desiredY = qMax(vScrollBar->minimum(), qMin(desiredY, vScrollBar->maximum()));
+        vScrollBar->setValue(desiredY);
+    }
+    
+    qCDebug(wallpaperPreview) << "Scrolled to item at position:" << itemPos << "center:" << itemCenter << "viewport size:" << viewportSize;
 }
 
 // alias for the calculateLayout() calls in this cpp

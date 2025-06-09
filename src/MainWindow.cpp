@@ -1434,6 +1434,11 @@ void MainWindow::onPlaylistWallpaperSelected(const QString& wallpaperId)
         WallpaperInfo info = wallpaperInfo.value();
         onWallpaperSelected(info);
         
+        // Also update the wallpaper selection in WallpaperPreview to sync visual selection
+        if (m_wallpaperPreview) {
+            m_wallpaperPreview->selectWallpaper(wallpaperId);
+        }
+        
         // Switch to "All Wallpapers" tab to show details
         m_mainTabWidget->setCurrentIndex(0);
     }

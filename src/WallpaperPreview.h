@@ -257,6 +257,9 @@ private:
     // add missing calculateLayout alias
     void calculateLayout();
     
+    // Scroll to make an item visible in the scroll area
+    void scrollToItem(WallpaperPreviewItem* item);
+    
     // Animation management methods
     void startCurrentPageAnimations();
     void stopCurrentPageAnimations();
