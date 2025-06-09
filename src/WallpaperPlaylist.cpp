@@ -245,11 +245,10 @@ void WallpaperPlaylist::startPlayback()
         
         // Launch wallpaper if WallpaperManager is available
         if (m_wallpaperManager) {
-            qCDebug(wallpaperPlaylist) << "  - WallpaperManager available, launching wallpaper";
+            qCDebug(wallpaperPlaylist) << "  - WallpaperManager available, launching wallpaper via signal";
             QStringList args = loadWallpaperSettings(m_currentWallpaperId);
-            qCDebug(wallpaperPlaylist) << "  - Calling m_wallpaperManager->launchWallpaper with ID:" << m_currentWallpaperId << "args:" << args;
-            bool result = m_wallpaperManager->launchWallpaper(m_currentWallpaperId, args);
-            qCDebug(wallpaperPlaylist) << "  - launchWallpaper returned:" << result;
+            qCDebug(wallpaperPlaylist) << "  - Emitting playlistLaunchRequested with ID:" << m_currentWallpaperId << "args:" << args;
+            emit playlistLaunchRequested(m_currentWallpaperId, args);
         } else {
             qCDebug(wallpaperPlaylist) << "  - WallpaperManager NOT available!";
         }
@@ -279,7 +278,7 @@ void WallpaperPlaylist::nextWallpaper()
         
         if (m_wallpaperManager) {
             QStringList args = loadWallpaperSettings(m_currentWallpaperId);
-            m_wallpaperManager->launchWallpaper(m_currentWallpaperId, args);
+            emit playlistLaunchRequested(m_currentWallpaperId, args);
         }
     }
 }
@@ -303,7 +302,7 @@ void WallpaperPlaylist::previousWallpaper()
         
         if (m_wallpaperManager) {
             QStringList args = loadWallpaperSettings(m_currentWallpaperId);
-            m_wallpaperManager->launchWallpaper(m_currentWallpaperId, args);
+            emit playlistLaunchRequested(m_currentWallpaperId, args);
         }
     }
 }

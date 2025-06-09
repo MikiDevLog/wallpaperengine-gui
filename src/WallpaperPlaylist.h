@@ -85,6 +85,7 @@ signals:
     void playbackStarted();
     void playbackStopped();
     void settingsChanged();
+    void playlistLaunchRequested(const QString& wallpaperId, const QStringList& args);
 
 private slots:
     void onTimerTimeout();

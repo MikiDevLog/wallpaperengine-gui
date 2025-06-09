@@ -203,6 +203,8 @@ MainWindow::MainWindow(QWidget *parent)
     , m_refreshing(false)
     , m_isClosing(false)
     , m_startMinimized(false)
+    , m_isLaunchingWallpaper(false)
+    , m_lastLaunchSource(LaunchSource::Manual)
     , m_pendingPlaylistRestore(false)
     , m_pendingRestoreWallpaperId("")
     , m_pendingRestoreFromPlaylist(false)
@@ -442,11 +444,15 @@ void MainWindow::createCentralWidget()
     connect(m_wallpaperPreview, &WallpaperPreview::wallpaperSelected,
             this, &MainWindow::onWallpaperSelected);
     connect(m_wallpaperPreview, &WallpaperPreview::wallpaperDoubleClicked,
-            this, &MainWindow::onWallpaperLaunched);
+            this, [this](const WallpaperInfo& wallpaper) {
+                launchWallpaperWithSource(wallpaper, LaunchSource::Manual);
+            });
 
     // properties panel → launch
     connect(m_propertiesPanel, &PropertiesPanel::launchWallpaper,
-            this, &MainWindow::onWallpaperLaunched);
+            this, [this](const WallpaperInfo& wallpaper) {
+                launchWallpaperWithSource(wallpaper, LaunchSource::Manual);
+            });
 
     // properties panel → wallpaper selection rejected due to unsaved changes
     connect(m_propertiesPanel, &PropertiesPanel::wallpaperSelectionRejected,
@@ -459,6 +465,19 @@ void MainWindow::createCentralWidget()
     // wallpaper manager → clear last wallpaper on stop
     connect(m_wallpaperManager, &WallpaperManager::wallpaperStopped,
             this, &MainWindow::onWallpaperStopped);
+
+    // playlist → launch wallpaper with proper source tracking
+    connect(m_wallpaperPlaylist, &WallpaperPlaylist::playlistLaunchRequested,
+            this, [this](const QString& wallpaperId, const QStringList& args) {
+                Q_UNUSED(args) // Args already handled in playlist settings loading
+                // Find wallpaper info and launch with playlist source
+                if (m_wallpaperManager) {
+                    auto wallpaperInfo = m_wallpaperManager->getWallpaperInfo(wallpaperId);
+                    if (wallpaperInfo.has_value()) {
+                        launchWallpaperWithSource(wallpaperInfo.value(), LaunchSource::Playlist);
+                    }
+                }
+            });
 
     // initial splitter sizing
     m_splitter->setSizes({840, 360});
@@ -1017,8 +1036,8 @@ void MainWindow::onRefreshFinished()
                     m_wallpaperPreview->selectWallpaper(wallpaperToRestore.id);
                 }
                 
-                // Launch the wallpaper automatically (this will mark it as individual launch)
-                onWallpaperLaunched(wallpaperToRestore);
+                // Launch the wallpaper automatically (this will mark it as startup restoration)
+                launchWallpaperWithSource(wallpaperToRestore, LaunchSource::StartupRestore);
             } else {
                 qCWarning(mainWindow) << "Could not find wallpaper with ID:" << m_pendingRestoreWallpaperId;
                 // Clear the invalid wallpaper ID from config
@@ -1068,6 +1087,9 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
 {
     qCDebug(mainWindow) << "onWallpaperLaunched - START:" << wallpaper.name << "ID:" << wallpaper.id;
     
+    // Set flag to indicate we're launching a wallpaper (prevents clearing last selected wallpaper on stop)
+    m_isLaunchingWallpaper = true;
+    
     try {
         if (m_config.wallpaperEnginePath().isEmpty()) {
             qCWarning(mainWindow) << "Wallpaper Engine binary path not configured";
@@ -1089,13 +1111,11 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
             return;
         }
         
-        // Track if this launch is from playlist (check if playlist is currently enabled and running)
-        bool launchedFromPlaylist = false;
-        if (m_wallpaperPlaylist) {
-            PlaylistSettings playlistSettings = m_wallpaperPlaylist->getSettings();
-            launchedFromPlaylist = playlistSettings.enabled;
-            qCDebug(mainWindow) << "Launch from playlist:" << launchedFromPlaylist;
-        }
+        // Track if this launch is from playlist based on the explicitly set launch source
+        bool launchedFromPlaylist = (m_lastLaunchSource == LaunchSource::Playlist);
+        
+        qCDebug(mainWindow) << "Launch source:" << static_cast<int>(m_lastLaunchSource) 
+                           << "-> Launch from playlist:" << launchedFromPlaylist;
         
         qCDebug(mainWindow) << "About to call wallpaper manager launch method";
         
@@ -1218,18 +1238,28 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
                 }
             }
             
-            // Save the wallpaper ID as the last selected wallpaper for auto-restore on next launch
-            qCDebug(mainWindow) << "About to save wallpaper ID as last selected:" << wallpaper.id;
-            m_config.setLastSelectedWallpaper(wallpaper.id);
-            qCDebug(mainWindow) << "Saved last selected wallpaper ID:" << wallpaper.id;
-            
-            // Save whether this was launched from playlist
-            m_config.setLastSessionUsedPlaylist(launchedFromPlaylist);
-            qCDebug(mainWindow) << "Saved last session used playlist:" << launchedFromPlaylist;
+            // Save configuration based on launch source
+            if (launchedFromPlaylist) {
+                // Playlist launch: clear individual wallpaper ID and mark as playlist session
+                qCDebug(mainWindow) << "Playlist launch - clearing last wallpaper and marking as playlist session";
+                m_config.setLastSelectedWallpaper("");
+                m_config.setLastSessionUsedPlaylist(true);
+            } else if (m_lastLaunchSource == LaunchSource::StartupRestore) {
+                // Startup restoration: preserve the existing configuration (don't change it)
+                qCDebug(mainWindow) << "Startup restoration - preserving existing configuration";
+                // Don't change the config during startup restoration
+            } else {
+                // Manual launch: save wallpaper ID and mark as individual session
+                qCDebug(mainWindow) << "Manual launch - saving wallpaper ID:" << wallpaper.id;
+                m_config.setLastSelectedWallpaper(wallpaper.id);
+                m_config.setLastSessionUsedPlaylist(false);
+            }
             
             // Verify it was saved
             QString verification = m_config.lastSelectedWallpaper();
-            qCDebug(mainWindow) << "Verification read back:" << verification;
+            bool playlistVerification = m_config.lastSessionUsedPlaylist();
+            qCDebug(mainWindow) << "Configuration saved - wallpaper ID:" << verification 
+                               << "playlist session:" << playlistVerification;
         } else {
             QString errorMsg = QString("Failed to launch wallpaper: %1").arg(wallpaper.name);
             qCWarning(mainWindow) << errorMsg;
@@ -1259,17 +1289,28 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
     qCDebug(mainWindow) << "onWallpaperLaunched - END:" << wallpaper.name;
 }
 
+void MainWindow::launchWallpaperWithSource(const WallpaperInfo& wallpaper, LaunchSource source)
+{
+    qCDebug(mainWindow) << "launchWallpaperWithSource called with source:" << static_cast<int>(source) << "wallpaper:" << wallpaper.name;
+    m_lastLaunchSource = source;
+    onWallpaperLaunched(wallpaper);
+}
+
 void MainWindow::onWallpaperStopped()
 {
-    qCDebug(mainWindow) << "Wallpaper stopped - isClosing:" << m_isClosing;
+    qCDebug(mainWindow) << "Wallpaper stopped - isClosing:" << m_isClosing << "isLaunchingWallpaper:" << m_isLaunchingWallpaper;
     
-    // Only clear the last selected wallpaper if this is a manual stop, not application exit
-    if (!m_isClosing) {
+    // Only clear the last selected wallpaper if this is a manual stop (user clicked stop button)
+    // NOT when application is closing or when launching a new wallpaper (which stops the previous one)
+    if (!m_isClosing && !m_isLaunchingWallpaper) {
         qCDebug(mainWindow) << "Manual stop - clearing last selected wallpaper";
         m_config.setLastSelectedWallpaper("");
     } else {
-        qCDebug(mainWindow) << "Application closing - preserving last selected wallpaper";
+        qCDebug(mainWindow) << "Wallpaper stopped but not clearing last selected wallpaper (closing:" << m_isClosing << ", launching:" << m_isLaunchingWallpaper << ")";
     }
+    
+    // Reset the launching flag
+    m_isLaunchingWallpaper = false;
     
     // Update status
     m_statusLabel->setText("Wallpaper stopped");

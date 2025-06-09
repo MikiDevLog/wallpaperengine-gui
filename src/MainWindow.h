@@ -53,6 +53,13 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     
+    // Launch source tracking enum
+    enum class LaunchSource {
+        Manual,           // User double-click, launch button, etc.
+        Playlist,         // Playlist timer, next/previous buttons
+        StartupRestore    // Application startup restoration
+    };
+    
     // Methods for system tray
     void setStartMinimized(bool minimized);
 
@@ -105,6 +112,9 @@ private:
     void setupSystemTray();
     void createTrayMenu();
     void updatePlaylistButtonStates();
+    
+    // Launch helper method
+    void launchWallpaperWithSource(const WallpaperInfo& wallpaper, LaunchSource source);
 
     // UI Components
     DropTabWidget* m_mainTabWidget;
@@ -144,6 +154,8 @@ private:
     bool m_refreshing;
     bool m_isClosing;
     bool m_startMinimized;
+    bool m_isLaunchingWallpaper; // Track when we're launching a new wallpaper
+    LaunchSource m_lastLaunchSource; // Track the source of the last wallpaper launch
     
     // Playlist restoration state (for timing fix)
     bool m_pendingPlaylistRestore;
