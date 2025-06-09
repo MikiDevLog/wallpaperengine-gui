@@ -1059,8 +1059,10 @@ QString PropertiesPanel::getSettingsFilePath(const QString& wallpaperId)
 QStringList PropertiesPanel::getAvailableScreens() const
 {
     QStringList screens;
-    // Add common screen identifiers
-    screens << "HDMI-A-1" << "HDMI-A-2" << "DP-1" << "DP-2" << "eDP-1" << "VGA-1";
+    // Add available screen identifiers
+    for (auto screen : qApp->screens()) {
+        screens << screen->name();
+    }
     return screens;
 }
 
