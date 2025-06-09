@@ -111,6 +111,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_descriptionEdit(new QTextEdit)
     , m_launchButton(new QPushButton("Launch Wallpaper"))
     , m_savePropertiesButton(new QPushButton("Save Properties"))
+    , m_resetPropertiesButton(new QPushButton("Reset Changes"))
     , m_propertiesWidget(nullptr)
     , m_scrollArea(new QScrollArea)
     , m_settingsWidget(nullptr)
@@ -134,6 +135,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_previewMovie(nullptr)
     , m_propertyWidgets()
     , m_originalValues()
+    , m_originalPropertyObjects()
     , m_propertiesModified(false)
     , m_settingsModified(false)
     , m_isWallpaperRunning(false)
@@ -142,6 +144,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     
     // Connect signals for property changes
     connect(m_savePropertiesButton, &QPushButton::clicked, this, &PropertiesPanel::onSavePropertiesClicked);
+    connect(m_resetPropertiesButton, &QPushButton::clicked, this, &PropertiesPanel::onResetPropertiesClicked);
     connect(m_saveSettingsButton, &QPushButton::clicked, this, &PropertiesPanel::onSaveSettingsClicked);
     connect(m_launchButton, &QPushButton::clicked, this, [this]() {
         if (!m_currentWallpaper.id.isEmpty()) {
@@ -334,6 +337,7 @@ void PropertiesPanel::setupUI()
        auto* propsButtonLayout = new QHBoxLayout;
        propsButtonLayout->setContentsMargins(0, 8, 0, 0);
        propsButtonLayout->addStretch();
+       propsButtonLayout->addWidget(m_resetPropertiesButton);
        propsButtonLayout->addWidget(m_savePropertiesButton);
        propsLayout->addLayout(propsButtonLayout);
 
@@ -570,14 +574,24 @@ void PropertiesPanel::setWallpaper(const WallpaperInfo& wallpaper)
     // Update preview
     updatePreview(wallpaper);
     
-    // Update properties
-    updateProperties(wallpaper.properties);
+    // Update properties - reload fresh from project.json file to get any saved changes
+    QJsonObject freshProperties = loadPropertiesFromProjectJson(wallpaper.id);
+    if (!freshProperties.isEmpty()) {
+        updateProperties(freshProperties);
+    } else {
+        // Fallback to cached properties if reading from file fails
+        updateProperties(wallpaper.properties);
+    }
     
     // Load and update settings for this wallpaper
     loadWallpaperSettings(wallpaper.id);
     
     // Enable launch button
     m_launchButton->setEnabled(!wallpaper.id.isEmpty());
+    
+    // Check if backup exists to enable/disable reset button
+    QString backupPath = getBackupProjectJsonPath(wallpaper.id);
+    m_resetPropertiesButton->setEnabled(!wallpaper.id.isEmpty() && QFileInfo::exists(backupPath));
     
     // Fetch Steam API metadata if available
     updateSteamApiMetadata(wallpaper);
@@ -690,6 +704,7 @@ void PropertiesPanel::updateProperties(const QJsonObject& properties)
     
     m_propertyWidgets.clear();
     m_originalValues.clear();
+    m_originalPropertyObjects.clear();
     
     if (properties.isEmpty()) {
         auto* noPropsLabel = new QLabel("No properties available");
@@ -706,6 +721,14 @@ void PropertiesPanel::updateProperties(const QJsonObject& properties)
     
     m_propertiesModified = false;
     m_savePropertiesButton->setEnabled(false);
+    
+    // Update reset button based on backup availability
+    if (!m_currentWallpaper.id.isEmpty()) {
+        QString backupPath = getBackupProjectJsonPath(m_currentWallpaper.id);
+        m_resetPropertiesButton->setEnabled(QFileInfo::exists(backupPath));
+    } else {
+        m_resetPropertiesButton->setEnabled(false);
+    }
 }
 
 void PropertiesPanel::addPropertiesFromObject(QFormLayout* layout, const QJsonObject& properties, const QString& prefix)
@@ -731,8 +754,9 @@ void PropertiesPanel::addPropertiesFromObject(QFormLayout* layout, const QJsonOb
             if (widget) {
                 layout->addRow(displayName + ":", widget);
                 
-                // Store original value for comparison
+                // Store original value and full property object for comparison
                 m_originalValues[propName] = value;
+                m_originalPropertyObjects[propName] = propObj;
             }
         }
     }
@@ -870,6 +894,7 @@ QWidget* PropertiesPanel::createPropertyWidget(const QString& propName, const QS
         widget->setProperty("propertyName", propName);
         m_propertyWidgets[propName] = widget;
         m_originalValues[propName] = value;
+        m_originalPropertyObjects[propName] = propertyObj;
     }
     
     return widget;
@@ -880,6 +905,7 @@ void PropertiesPanel::onPropertyChanged()
     // Mark properties as modified to enable the save button
     m_propertiesModified = true;
     m_savePropertiesButton->setEnabled(true);
+    m_resetPropertiesButton->setEnabled(true);
     
     // Provide visual indication the properties have changed
     m_savePropertiesButton->setStyleSheet("QPushButton { background-color: #4CAF50; font-weight: bold; }");
@@ -889,22 +915,46 @@ void PropertiesPanel::onSavePropertiesClicked()
 {
     QJsonObject modifiedProperties = saveCurrentProperties();
     
-    // Save to cache file
-    bool saved = saveCachedProperties(m_currentWallpaper.id, modifiedProperties);
+    // Save to original project.json file instead of cache
+    bool saved = savePropertiesToProjectJson(m_currentWallpaper.id, modifiedProperties);
     if (saved) {
-        qCDebug(propertiesPanel) << "Properties saved successfully for wallpaper:" << m_currentWallpaper.id;
+        qCDebug(propertiesPanel) << "Properties saved successfully to project.json for wallpaper:" << m_currentWallpaper.id;
         
         // Reset the modified state
         m_propertiesModified = false;
         m_savePropertiesButton->setEnabled(false);
-        m_savePropertiesButton->setStyleSheet("QPushButton { background-color: #4CAF50; }");
+        m_savePropertiesButton->setStyleSheet("");
+        
+        // Reload properties from the saved project.json to reflect changes in UI
+        QJsonObject freshProperties = loadPropertiesFromProjectJson(m_currentWallpaper.id);
+        if (!freshProperties.isEmpty()) {
+            updateProperties(freshProperties);
+        }
         
         // If wallpaper is running, ask to restart it
         if (m_isWallpaperRunning) {
             restartWallpaperWithChanges();
         }
     } else {
-        qCWarning(propertiesPanel) << "Failed to save properties for wallpaper:" << m_currentWallpaper.id;
+        qCWarning(propertiesPanel) << "Failed to save properties to project.json for wallpaper:" << m_currentWallpaper.id;
+    }
+}
+
+void PropertiesPanel::onResetPropertiesClicked()
+{
+    bool reset = resetPropertiesFromBackup(m_currentWallpaper.id);
+    if (reset) {
+        qCDebug(propertiesPanel) << "Properties reset successfully from backup for wallpaper:" << m_currentWallpaper.id;
+        
+        // Reload the wallpaper to refresh the properties panel
+        setWallpaper(m_currentWallpaper);
+        
+        // If wallpaper is running, ask to restart it
+        if (m_isWallpaperRunning) {
+            restartWallpaperWithChanges();
+        }
+    } else {
+        qCWarning(propertiesPanel) << "Failed to reset properties from backup for wallpaper:" << m_currentWallpaper.id;
     }
 }
 
@@ -1127,6 +1177,7 @@ void PropertiesPanel::clear()
     
     m_propertyWidgets.clear();
     m_originalValues.clear();
+    m_originalPropertyObjects.clear();
     m_propertiesModified = false;
     m_settingsModified = false;
     m_isWallpaperRunning = false;
@@ -1179,6 +1230,7 @@ void PropertiesPanel::clear()
     
     m_launchButton->setEnabled(false);
     m_savePropertiesButton->setEnabled(false);
+    m_resetPropertiesButton->setEnabled(false);
     m_saveSettingsButton->setEnabled(false);
 }
 
@@ -1329,17 +1381,20 @@ QJsonObject PropertiesPanel::saveCurrentProperties()
             }
         }
         
-        // If we got a value, create the property object
+        // If we got a value, create the property object preserving original metadata
         if (!newValue.isUndefined()) {
             QJsonObject propObj;
-            propObj["type"] = type;
-            propObj["value"] = newValue;
             
-            // Add other metadata if needed
-            if (m_originalValues.contains(propName)) {
-                QJsonValue originalValue = m_originalValues[propName];
-                // You could add "text", "options", etc. here if needed
+            // Start with the original property object if available to preserve all metadata
+            if (m_originalPropertyObjects.contains(propName)) {
+                propObj = m_originalPropertyObjects[propName];
+            } else {
+                // Fallback to minimal object if no original found
+                propObj["type"] = type;
             }
+            
+            // Update only the value, keeping all other metadata (options, min, max, text, order, etc.)
+            propObj["value"] = newValue;
             
             properties[propName] = propObj;
         }
@@ -1352,6 +1407,62 @@ QJsonObject PropertiesPanel::saveCurrentProperties()
     }
     
     return result;
+}
+
+QJsonObject PropertiesPanel::loadPropertiesFromProjectJson(const QString& wallpaperId)
+{
+    QString projectPath = getProjectJsonPath(wallpaperId);
+    if (projectPath.isEmpty()) {
+        qCWarning(propertiesPanel) << "Cannot find project.json for wallpaper:" << wallpaperId;
+        return QJsonObject();
+    }
+    
+    // Read the project.json file
+    QFile file(projectPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCWarning(propertiesPanel) << "Failed to open project.json for reading:" << projectPath;
+        return QJsonObject();
+    }
+    
+    QByteArray data = file.readAll();
+    file.close();
+    
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+    
+    if (error.error != QJsonParseError::NoError) {
+        qCWarning(propertiesPanel) << "Failed to parse project.json:" << error.errorString();
+        return QJsonObject();
+    }
+    
+    QJsonObject projectJson = doc.object();
+    
+    // Extract properties using the same logic as WallpaperManager::extractProperties
+    QJsonObject properties;
+    
+    // Look for properties in the "general" section
+    QJsonObject general = projectJson.value("general").toObject();
+    if (general.contains("properties")) {
+        QJsonObject generalProps = general.value("properties").toObject();
+        
+        // Merge general properties
+        for (auto it = generalProps.begin(); it != generalProps.end(); ++it) {
+            properties[it.key()] = it.value();
+        }
+    }
+    
+    // Also check for properties directly in root (fallback)
+    if (projectJson.contains("properties")) {
+        QJsonObject rootProps = projectJson.value("properties").toObject();
+        
+        // Merge root properties
+        for (auto it = rootProps.begin(); it != rootProps.end(); ++it) {
+            properties[it.key()] = it.value();
+        }
+    }
+    
+    qCDebug(propertiesPanel) << "Loaded" << properties.size() << "properties from project.json for wallpaper:" << wallpaperId;
+    return properties;
 }
 
 void PropertiesPanel::onApiMetadataReceived(const QString& itemId, const WorkshopItemInfo& info)
@@ -1475,6 +1586,134 @@ QString PropertiesPanel::getCacheFilePath(const QString& wallpaperId) const
     }
     
     return QString("%1/properties/%2.json").arg(cacheDir, wallpaperId);
+}
+
+bool PropertiesPanel::savePropertiesToProjectJson(const QString& wallpaperId, const QJsonObject& properties)
+{
+    QString projectPath = getProjectJsonPath(wallpaperId);
+    if (projectPath.isEmpty()) {
+        qCWarning(propertiesPanel) << "Cannot find project.json for wallpaper:" << wallpaperId;
+        return false;
+    }
+    
+    QString backupPath = getBackupProjectJsonPath(wallpaperId);
+    
+    // Create backup if it doesn't exist
+    if (!QFileInfo::exists(backupPath)) {
+        if (!QFile::copy(projectPath, backupPath)) {
+            qCWarning(propertiesPanel) << "Failed to create backup of project.json:" << backupPath;
+            return false;
+        }
+        qCDebug(propertiesPanel) << "Created backup of project.json:" << backupPath;
+    }
+    
+    // Read the current project.json
+    QFile file(projectPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCWarning(propertiesPanel) << "Failed to open project.json for reading:" << projectPath;
+        return false;
+    }
+    
+    QByteArray data = file.readAll();
+    file.close();
+    
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+    
+    if (error.error != QJsonParseError::NoError) {
+        qCWarning(propertiesPanel) << "Failed to parse project.json:" << error.errorString();
+        return false;
+    }
+    
+    QJsonObject projectJson = doc.object();
+    
+    // Update properties in the project.json structure
+    if (properties.contains("general")) {
+        QJsonObject generalProps = properties.value("general").toObject();
+        if (generalProps.contains("properties")) {
+            QJsonObject newProperties = generalProps.value("properties").toObject();
+            
+            // Get or create the general section
+            QJsonObject general = projectJson.value("general").toObject();
+            QJsonObject existingProperties = general.value("properties").toObject();
+            
+            // Merge the new properties with existing ones
+            for (auto it = newProperties.begin(); it != newProperties.end(); ++it) {
+                existingProperties[it.key()] = it.value();
+            }
+            
+            general["properties"] = existingProperties;
+            projectJson["general"] = general;
+        }
+    }
+    
+    // Write the modified project.json
+    QFile writeFile(projectPath);
+    if (!writeFile.open(QIODevice::WriteOnly)) {
+        qCWarning(propertiesPanel) << "Failed to open project.json for writing:" << projectPath;
+        return false;
+    }
+    
+    QJsonDocument newDoc(projectJson);
+    writeFile.write(newDoc.toJson());
+    writeFile.close();
+    
+    qCDebug(propertiesPanel) << "Successfully saved properties to project.json:" << projectPath;
+    return true;
+}
+
+bool PropertiesPanel::resetPropertiesFromBackup(const QString& wallpaperId)
+{
+    QString projectPath = getProjectJsonPath(wallpaperId);
+    QString backupPath = getBackupProjectJsonPath(wallpaperId);
+    
+    if (projectPath.isEmpty()) {
+        qCWarning(propertiesPanel) << "Cannot find project.json for wallpaper:" << wallpaperId;
+        return false;
+    }
+    
+    if (!QFileInfo::exists(backupPath)) {
+        QMessageBox::information(this, "Reset Changes", 
+            "No backup file found. Either no changes have been made, or the backup file is missing.");
+        return false;
+    }
+    
+    // Remove the modified project.json
+    if (QFileInfo::exists(projectPath)) {
+        if (!QFile::remove(projectPath)) {
+            qCWarning(propertiesPanel) << "Failed to remove modified project.json:" << projectPath;
+            return false;
+        }
+    }
+    
+    // Rename backup back to project.json
+    if (!QFile::rename(backupPath, projectPath)) {
+        qCWarning(propertiesPanel) << "Failed to restore backup project.json:" << backupPath;
+        return false;
+    }
+    
+    qCDebug(propertiesPanel) << "Successfully reset properties from backup:" << projectPath;
+    return true;
+}
+
+QString PropertiesPanel::getProjectJsonPath(const QString& wallpaperId) const
+{
+    if (m_currentWallpaper.id == wallpaperId && !m_currentWallpaper.projectPath.isEmpty()) {
+        return m_currentWallpaper.projectPath;
+    }
+    
+    // If we don't have the current wallpaper info, we can't find the project path
+    return QString();
+}
+
+QString PropertiesPanel::getBackupProjectJsonPath(const QString& wallpaperId) const
+{
+    QString projectPath = getProjectJsonPath(wallpaperId);
+    if (projectPath.isEmpty()) {
+        return QString();
+    }
+    
+    return projectPath + ".backup";
 }
 
 void PropertiesPanel::loadAnimatedPreview(const QString& previewPath)

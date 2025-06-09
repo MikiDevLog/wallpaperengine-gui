@@ -302,8 +302,20 @@ bool WallpaperManager::launchWallpaper(const QString& wallpaperId, const QString
         args << "--assets-dir" << assetsDir;
     }
     
-    // Add wallpaper path as final argument (not with --dir flag)
+    // Add wallpaper path before property arguments
     args << wallpaper.path;
+    
+    // Check for backup file and add property arguments at the very end
+    QString backupPath = wallpaper.projectPath + ".backup";
+    if (QFileInfo::exists(backupPath)) {
+        QStringList propertyArgs = generatePropertyArguments(wallpaper.projectPath);
+        if (!propertyArgs.isEmpty()) {
+            args.append(propertyArgs);
+            // propertyArgs includes "--set-property" plus the property pairs
+            int propertyCount = propertyArgs.size() - 1; // Subtract 1 for the --set-property flag
+            emit outputReceived(QString("Found backup file, applying %1 property overrides").arg(propertyCount));
+        }
+    }
     
     emit outputReceived(QString("Launching wallpaper: %1").arg(wallpaper.name));
     emit outputReceived(QString("Command: %1 %2").arg(binaryPath, args.join(" ")));
@@ -460,4 +472,71 @@ void WallpaperManager::onProcessOutput()
             }
         }
     }
+}
+
+QStringList WallpaperManager::generatePropertyArguments(const QString& projectJsonPath)
+{
+    QStringList propertyArgs;
+    
+    // Read the current project.json file (which contains modified properties)
+    QFile file(projectJsonPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCWarning(wallpaperManager) << "Failed to open project.json for property arguments:" << projectJsonPath;
+        return propertyArgs;
+    }
+    
+    QByteArray data = file.readAll();
+    file.close();
+    
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+    
+    if (error.error != QJsonParseError::NoError) {
+        qCWarning(wallpaperManager) << "Failed to parse project.json for properties:" << error.errorString();
+        return propertyArgs;
+    }
+    
+    // Extract properties using the same logic as extractProperties()
+    QJsonObject projectJson = doc.object();
+    QJsonObject properties = extractProperties(projectJson);
+    
+    // Convert properties to --set-property arguments
+    // Format: --set-property name1=value1 name2=value2 name3=value3
+    QStringList propertyPairs;
+    
+    for (auto it = properties.begin(); it != properties.end(); ++it) {
+        QString propName = it.key();
+        QJsonObject propObj = it.value().toObject();
+        
+        if (propObj.contains("value")) {
+            QJsonValue value = propObj.value("value");
+            QString valueStr;
+            
+            // Convert value to string based on type
+            if (value.isBool()) {
+                valueStr = value.toBool() ? "true" : "false";
+            } else if (value.isDouble()) {
+                valueStr = QString::number(value.toDouble());
+            } else if (value.isString()) {
+                valueStr = value.toString();
+            } else {
+                // For other types, use JSON representation
+                QJsonDocument valueDoc(QJsonArray{value});
+                valueStr = valueDoc.toJson(QJsonDocument::Compact);
+                valueStr = valueStr.mid(1, valueStr.length() - 2); // Remove [ and ]
+            }
+            
+            propertyPairs << QString("%1=%2").arg(propName, valueStr);
+            qCDebug(wallpaperManager) << "Added property:" << propName << "=" << valueStr;
+        }
+    }
+    
+    // Add --set-property flag followed by all property pairs
+    if (!propertyPairs.isEmpty()) {
+        propertyArgs << "--set-property";
+        propertyArgs.append(propertyPairs);
+    }
+    
+    qCDebug(wallpaperManager) << "Generated" << propertyPairs.size() << "property arguments from" << projectJsonPath;
+    return propertyArgs;
 }

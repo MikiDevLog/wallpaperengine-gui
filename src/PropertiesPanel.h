@@ -75,6 +75,7 @@ signals:
 private slots:
     void onPropertyChanged();
     void onSavePropertiesClicked();
+    void onResetPropertiesClicked();
     void restartWallpaperWithChanges();
     void onUserProfileReceived(const QString& steamId, const SteamUserProfile& profile);
     // New slots for custom settings
@@ -92,8 +93,13 @@ private:
     QPixmap scalePixmapKeepAspectRatio(const QPixmap& original, const QSize& targetSize);
     void setPlaceholderPreview(const QString& text);
     QJsonObject saveCurrentProperties();
+    QJsonObject loadPropertiesFromProjectJson(const QString& wallpaperId);
     bool loadCachedProperties(const QString& wallpaperId);
     bool saveCachedProperties(const QString& wallpaperId, const QJsonObject& properties);
+    bool savePropertiesToProjectJson(const QString& wallpaperId, const QJsonObject& properties);
+    bool resetPropertiesFromBackup(const QString& wallpaperId);
+    QString getProjectJsonPath(const QString& wallpaperId) const;
+    QString getBackupProjectJsonPath(const QString& wallpaperId) const;
     QString getCacheFilePath(const QString& wallpaperId) const;  // Added const qualifier to match implementation
     
     // Modified method to take a settings tab as parameter
@@ -118,6 +124,7 @@ private:
     QTextEdit* m_descriptionEdit;
     QPushButton* m_launchButton;
     QPushButton* m_savePropertiesButton;
+    QPushButton* m_resetPropertiesButton;
     QWidget* m_propertiesWidget;
     QScrollArea* m_scrollArea;
     
@@ -157,6 +164,7 @@ private:
     // Track modified properties
     QMap<QString, QWidget*> m_propertyWidgets;
     QMap<QString, QJsonValue> m_originalValues;
+    QMap<QString, QJsonObject> m_originalPropertyObjects;
     bool m_propertiesModified;
     bool m_settingsModified;
     bool m_isWallpaperRunning;

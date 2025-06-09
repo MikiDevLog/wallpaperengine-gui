@@ -72,6 +72,7 @@ private:
     QJsonObject extractProperties(const QJsonObject& projectJson);
     QString findPreviewImage(const QString& wallpaperDir);
     QString extractWorkshopId(const QString& dirPath);
+    QStringList generatePropertyArguments(const QString& projectJsonPath);
     
     QList<WallpaperInfo> m_wallpapers;
     QProcess* m_wallpaperProcess;
