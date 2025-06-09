@@ -13,6 +13,7 @@
 #include <QListWidget>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QScrollArea>
 
 class ConfigManager;
 

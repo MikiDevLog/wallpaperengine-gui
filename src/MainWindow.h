@@ -16,12 +16,34 @@
 #include <QSystemTrayIcon>
 #include <QMenu>
 #include <QAction>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 
 class WallpaperPreview;
 class PropertiesPanel;
 class ConfigManager;
 class WallpaperManager;
+class WallpaperPlaylist;
+class PlaylistPreview;
 struct WallpaperInfo;
+
+// Custom QTabWidget that accepts drops on tab buttons
+class DropTabWidget : public QTabWidget
+{
+    Q_OBJECT
+
+public:
+    explicit DropTabWidget(QWidget* parent = nullptr);
+
+signals:
+    void wallpaperDroppedOnPlaylistTab(const QString& wallpaperId);
+
+protected:
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
+};
 
 class MainWindow : public QMainWindow
 {
@@ -54,6 +76,13 @@ private slots:
     void clearOutput();
     void saveOutput();
     
+    // Playlist slots
+    void onAddToPlaylistClicked();
+    void onRemoveFromPlaylistClicked();
+    void onPlaylistWallpaperSelected(const QString& wallpaperId);
+    void onRemoveFromPlaylistRequested(const QString& wallpaperId);
+    void onWallpaperDroppedOnPlaylistTab(const QString& wallpaperId);
+    
     // System tray slots
     void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason);
     void showWindow();
@@ -74,13 +103,20 @@ private:
     // System tray methods
     void setupSystemTray();
     void createTrayMenu();
+    void updatePlaylistButtonStates();
 
     // UI Components
+    DropTabWidget* m_mainTabWidget;
     QSplitter *m_splitter;
     QTabWidget *m_rightTabWidget;
     WallpaperPreview *m_wallpaperPreview;
     PropertiesPanel *m_propertiesPanel;
+    PlaylistPreview *m_playlistPreview;
     QTextEdit *m_outputTextEdit;
+    
+    // Playlist UI components
+    QPushButton *m_addToPlaylistButton;
+    QPushButton *m_removeFromPlaylistButton;
     
     // Menu and toolbar
     QAction *m_refreshAction;
@@ -100,12 +136,18 @@ private:
     // Managers
     ConfigManager& m_config;
     WallpaperManager *m_wallpaperManager;
+    WallpaperPlaylist *m_wallpaperPlaylist;
     
     // State
     QString m_currentWallpaperId;
     bool m_refreshing;
     bool m_isClosing;
     bool m_startMinimized;
+    
+    // Playlist restoration state (for timing fix)
+    bool m_pendingPlaylistRestore;
+    QString m_pendingRestoreWallpaperId;
+    bool m_pendingRestoreFromPlaylist;
     
     // System tray
     QSystemTrayIcon *m_systemTrayIcon;

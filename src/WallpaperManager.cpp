@@ -250,6 +250,15 @@ WallpaperInfo WallpaperManager::getWallpaperById(const QString& id) const
     return WallpaperInfo();
 }
 
+std::optional<WallpaperInfo> WallpaperManager::getWallpaperInfo(const QString& id) const
+{
+    WallpaperInfo wallpaper = getWallpaperById(id);
+    if (!wallpaper.id.isEmpty()) {
+        return wallpaper;
+    }
+    return std::nullopt;
+}
+
 bool WallpaperManager::launchWallpaper(const QString& wallpaperId, const QStringList& additionalArgs)
 {
     ConfigManager& config = ConfigManager::instance();

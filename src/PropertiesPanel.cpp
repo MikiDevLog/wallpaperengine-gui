@@ -32,6 +32,70 @@
 
 Q_LOGGING_CATEGORY(propertiesPanel, "app.propertiespanel")
 
+// Implementation of WallpaperSettings::toCommandLineArgs()
+QStringList WallpaperSettings::toCommandLineArgs() const
+{
+    QStringList args;
+    
+    // Audio settings
+    if (silent) {
+        args << "--silent";
+    }
+    
+    if (volume != 15) { // Only add if different from default
+        args << "--volume" << QString::number(volume);
+    }
+    
+    if (noAutoMute) {
+        args << "--noautomute";
+    }
+    
+    if (noAudioProcessing) {
+        args << "--no-audio-processing";
+    }
+    
+    // Performance settings
+    if (fps != 30) { // Only add if different from default
+        args << "--fps" << QString::number(fps);
+    }
+    
+    // Display settings
+    if (!windowGeometry.isEmpty()) {
+        args << "--window" << windowGeometry;
+    }
+    
+    if (!screenRoot.isEmpty()) {
+        args << "--screen-root" << screenRoot;
+        
+        if (!backgroundId.isEmpty()) {
+            args << "--bg" << backgroundId;
+        }
+    }
+    
+    if (scaling != "default") {
+        args << "--scaling" << scaling;
+    }
+    
+    if (clamping != "clamp") {
+        args << "--clamping" << clamping;
+    }
+    
+    // Behavior settings
+    if (disableMouse) {
+        args << "--disable-mouse";
+    }
+    
+    if (disableParallax) {
+        args << "--disable-parallax";
+    }
+    
+    if (noFullscreenPause) {
+        args << "--no-fullscreen-pause";
+    }
+    
+    return args;
+}
+
 PropertiesPanel::PropertiesPanel(QWidget* parent)
     : QWidget(parent)
     , m_nameLabel(new QLabel("No wallpaper selected"))
@@ -117,7 +181,19 @@ void PropertiesPanel::setupUI()
     // Info page (just the preview & basic info)
     QWidget* infoPage = new QWidget;
     {
-       QVBoxLayout* l = new QVBoxLayout(infoPage);
+       QVBoxLayout* mainInfoLayout = new QVBoxLayout(infoPage);
+       mainInfoLayout->setContentsMargins(0, 0, 0, 0);
+       mainInfoLayout->setSpacing(0);
+       
+       // Create scroll area for info tab
+       auto* infoScrollArea = new QScrollArea;
+       infoScrollArea->setWidgetResizable(true);
+       infoScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+       infoScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+       infoScrollArea->setFrameShape(QFrame::NoFrame);
+       
+       auto* infoScrollWidget = new QWidget;
+       QVBoxLayout* l = new QVBoxLayout(infoScrollWidget);
        l->setContentsMargins(12, 12, 12, 12);
        l->setSpacing(16);
        
@@ -222,6 +298,10 @@ void PropertiesPanel::setupUI()
        launchLayout->addStretch();
        
        l->addLayout(launchLayout);
+       
+       // Set the scroll widget and add it to the main layout
+       infoScrollArea->setWidget(infoScrollWidget);
+       mainInfoLayout->addWidget(infoScrollArea);
     }
     
     // Wallpaper Settings (old “Properties” tab)
@@ -847,6 +927,9 @@ void PropertiesPanel::onSettingChanged()
     
     m_settingsModified = true;
     m_saveSettingsButton->setEnabled(true);
+    
+    // Emit signal to notify that settings have changed
+    emit settingsChanged(m_currentWallpaper.id, m_currentSettings);
 }
 
 void PropertiesPanel::onSaveSettingsClicked()

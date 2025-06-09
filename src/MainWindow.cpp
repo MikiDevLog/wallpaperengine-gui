@@ -1,6 +1,8 @@
 #include "MainWindow.h"
 #include "WallpaperPreview.h"
 #include "PropertiesPanel.h"
+#include "PlaylistPreview.h"
+#include "WallpaperPlaylist.h"
 #include "SettingsDialog.h"
 #include "ConfigManager.h"
 #include "WallpaperManager.h"
@@ -33,14 +35,159 @@
 #include <QPixmap>
 #include <QFile>
 #include <QCheckBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QDragMoveEvent>
+#include <QWidget>
 
 Q_LOGGING_CATEGORY(mainWindow, "app.mainwindow")
 
+// DropTabWidget implementation
+DropTabWidget::DropTabWidget(QWidget* parent) : QTabWidget(parent)
+{
+    setAcceptDrops(true);
+    // Also set accept drops on the tab bar and enable hover events
+    tabBar()->setAcceptDrops(true);
+    tabBar()->setAttribute(Qt::WA_Hover, true);
+}
+
+void DropTabWidget::dragEnterEvent(QDragEnterEvent* event)
+{
+    qDebug() << "Drag enter event with formats:" << event->mimeData()->formats();
+    if (event->mimeData()->hasFormat("application/x-wallpaper-id") || 
+        event->mimeData()->hasText()) {
+        qDebug() << "Drag enter: accepting wallpaper drag";
+        event->acceptProposedAction();
+    } else {
+        qDebug() << "Drag enter: ignoring non-wallpaper drag";
+        event->ignore();
+    }
+}
+
+void DropTabWidget::dragMoveEvent(QDragMoveEvent* event)
+{
+    qDebug() << "Drag move event at position:" << event->position().toPoint();
+    if (event->mimeData()->hasFormat("application/x-wallpaper-id") || 
+        event->mimeData()->hasText()) {
+        
+        // Try multiple coordinate mapping approaches to handle different Qt themes
+        QPoint eventPos = event->position().toPoint();
+        
+        // First approach: map from parent (tab widget) to tab bar
+        QPoint tabBarPos1 = tabBar()->mapFromParent(eventPos);
+        
+        // Second approach: use tab bar geometry within the widget
+        QRect tabBarGeometry = tabBar()->geometry();
+        QPoint tabBarPos2 = eventPos - tabBarGeometry.topLeft();
+        
+        qDebug() << "Event position:" << eventPos;
+        qDebug() << "Tab bar geometry:" << tabBarGeometry;
+        qDebug() << "Mapped position 1 (mapFromParent):" << tabBarPos1;
+        qDebug() << "Mapped position 2 (geometry offset):" << tabBarPos2;
+        
+        // Check both coordinate mappings
+        QPoint positionsToCheck[] = {tabBarPos1, tabBarPos2, eventPos};
+        const char* methodNames[] = {"mapFromParent", "geometry offset", "direct position"};
+        
+        for (int method = 0; method < 3; method++) {
+            QPoint checkPos = positionsToCheck[method];
+            qDebug() << "Checking with method" << methodNames[method] << "position:" << checkPos;
+            
+            for (int i = 0; i < count(); ++i) {
+                QRect tabRect = tabBar()->tabRect(i);
+                qDebug() << "Tab" << i << "rect:" << tabRect;
+                if (tabRect.contains(checkPos)) {
+                    qDebug() << "Hit detected with method" << methodNames[method] << "on tab" << i;
+                    if (i == 1) { // Playlist tab
+                        qDebug() << "Drag move: over playlist tab, accepting";
+                        event->acceptProposedAction();
+                        return;
+                    } else {
+                        qDebug() << "Drag move: over tab" << i << ", ignoring";
+                        event->ignore();
+                        return;
+                    }
+                }
+            }
+        }
+        qDebug() << "Drag move: not over any tab with any method";
+    }
+    event->ignore();
+}
+
+void DropTabWidget::dropEvent(QDropEvent* event)
+{
+    qDebug() << "Drop event received at position:" << event->position().toPoint() << "with mime data formats:" << event->mimeData()->formats();
+    
+    if (event->mimeData()->hasFormat("application/x-wallpaper-id") || 
+        event->mimeData()->hasText()) {
+        qDebug() << "Drop event has wallpaper ID format";
+        
+        // Try multiple coordinate mapping approaches to handle different Qt themes
+        QPoint eventPos = event->position().toPoint();
+        
+        // First approach: map from parent (tab widget) to tab bar
+        QPoint tabBarPos1 = tabBar()->mapFromParent(eventPos);
+        
+        // Second approach: use tab bar geometry within the widget
+        QRect tabBarGeometry = tabBar()->geometry();
+        QPoint tabBarPos2 = eventPos - tabBarGeometry.topLeft();
+        
+        qDebug() << "Event position:" << eventPos;
+        qDebug() << "Tab bar geometry:" << tabBarGeometry;
+        qDebug() << "Mapped position 1 (mapFromParent):" << tabBarPos1;
+        qDebug() << "Mapped position 2 (geometry offset):" << tabBarPos2;
+        
+        // Check both coordinate mappings
+        QPoint positionsToCheck[] = {tabBarPos1, tabBarPos2, eventPos};
+        const char* methodNames[] = {"mapFromParent", "geometry offset", "direct position"};
+        
+        for (int method = 0; method < 3; method++) {
+            QPoint checkPos = positionsToCheck[method];
+            qDebug() << "Checking with method" << methodNames[method] << "position:" << checkPos;
+            
+            for (int i = 0; i < count(); ++i) {
+                QRect tabRect = tabBar()->tabRect(i);
+                qDebug() << "Tab" << i << "rect:" << tabRect;
+                if (tabRect.contains(checkPos)) {
+                    qDebug() << "Hit detected with method" << methodNames[method] << "on tab" << i;
+                    if (i == 1) { // Playlist tab
+                        QString wallpaperId;
+                        if (event->mimeData()->hasFormat("application/x-wallpaper-id")) {
+                            wallpaperId = QString::fromUtf8(event->mimeData()->data("application/x-wallpaper-id"));
+                        } else if (event->mimeData()->hasText()) {
+                            wallpaperId = event->mimeData()->text();
+                        }
+                        qDebug() << "Dropping wallpaper with ID:" << wallpaperId << "on playlist tab";
+                        emit wallpaperDroppedOnPlaylistTab(wallpaperId);
+                        event->acceptProposedAction();
+                        
+                        // Switch to the playlist tab
+                        setCurrentIndex(1);
+                        return;
+                    } else {
+                        qDebug() << "Drop not on playlist tab, ignoring";
+                        event->ignore();
+                        return;
+                    }
+                }
+            }
+        }
+        qDebug() << "Drop not on any tab with any method, ignoring";
+    } else {
+        qDebug() << "Drop event does not have wallpaper ID format";
+    }
+    event->ignore();
+}
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
+    , m_mainTabWidget(nullptr)
     , m_splitter(nullptr)
     , m_wallpaperPreview(nullptr)
     , m_propertiesPanel(nullptr)
+    , m_playlistPreview(nullptr)
     , m_refreshAction(nullptr)
     , m_settingsAction(nullptr)
     , m_aboutAction(nullptr)
@@ -48,17 +195,24 @@ MainWindow::MainWindow(QWidget *parent)
     , m_statusLabel(nullptr)
     , m_wallpaperCountLabel(nullptr)
     , m_progressBar(nullptr)
+    , m_addToPlaylistButton(nullptr)
+    , m_removeFromPlaylistButton(nullptr)
     , m_config(ConfigManager::instance())
     , m_wallpaperManager(new WallpaperManager(this))
+    , m_wallpaperPlaylist(new WallpaperPlaylist(this))
     , m_refreshing(false)
     , m_isClosing(false)
     , m_startMinimized(false)
+    , m_pendingPlaylistRestore(false)
+    , m_pendingRestoreWallpaperId("")
+    , m_pendingRestoreFromPlaylist(false)
     , m_systemTrayIcon(nullptr)
     , m_trayMenu(nullptr)
     , m_showAction(nullptr)
     , m_hideAction(nullptr)
     , m_quitAction(nullptr)
 {
+    qCDebug(mainWindow) << "=== MAINWINDOW CONSTRUCTOR START ===";
     setWindowTitle("Wallpaper Engine GUI");
     setWindowIcon(QIcon(":/icons/icons/wallpaper.png"));
     
@@ -72,14 +226,35 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    qCDebug(mainWindow) << "MainWindow destructor starting";
+    
+    // Set closing flag to prevent further operations
+    m_isClosing = true;
+    
+    // Stop any running wallpapers first
+    if (m_wallpaperManager) {
+        m_wallpaperManager->stopWallpaper();
+    }
+    
+    // Hide and cleanup system tray icon
+    if (m_systemTrayIcon) {
+        m_systemTrayIcon->hide();
+        m_systemTrayIcon = nullptr;  // Will be deleted by Qt parent-child relationship
+    }
+    
+    // Save settings after stopping wallpapers but before cleanup
     saveSettings();
+    
+    qCDebug(mainWindow) << "MainWindow destructor completed";
 }
 
 void MainWindow::setupUI()
 {
+    qCDebug(mainWindow) << "=== ENTERING setupUI() ===";
     setupMenuBar();
     setupToolBar();
     setupStatusBar();
+    qCDebug(mainWindow) << "=== About to call createCentralWidget() ===";
     createCentralWidget();
     
     // Set initial window size
@@ -140,6 +315,7 @@ void MainWindow::setupMenuBar()
 void MainWindow::setupToolBar()
 {
     auto *toolBar = addToolBar("Main");
+    toolBar->setObjectName("MainToolBar");  // Set object name to avoid Qt warnings
     toolBar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     
     // Remove the refresh action from the toolbar
@@ -167,15 +343,53 @@ void MainWindow::setupStatusBar()
 
 void MainWindow::createCentralWidget()
 {
+    qCDebug(mainWindow) << "=== ENTERING createCentralWidget() ===";
+    // Create main tab widget for "All Wallpapers" and "Wallpaper Playlist"
+    m_mainTabWidget = new DropTabWidget;
+    setCentralWidget(m_mainTabWidget);
+    
+    // Connect drop signal
+    connect(m_mainTabWidget, &DropTabWidget::wallpaperDroppedOnPlaylistTab,
+            this, &MainWindow::onWallpaperDroppedOnPlaylistTab);
+    
+    // Create "All Wallpapers" tab
+    QWidget* allWallpapersTab = new QWidget;
+    QHBoxLayout* allWallpapersLayout = new QHBoxLayout(allWallpapersTab);
+    allWallpapersLayout->setContentsMargins(0, 0, 0, 0);
+    
     m_splitter = new QSplitter(Qt::Horizontal);
-    setCentralWidget(m_splitter);
+    allWallpapersLayout->addWidget(m_splitter);
 
-    // left: wallpaper preview
+    // left: wallpaper preview with playlist buttons
+    QWidget* leftWidget = new QWidget;
+    QVBoxLayout* leftLayout = new QVBoxLayout(leftWidget);
+    leftLayout->setContentsMargins(5, 5, 5, 5);
+    leftLayout->setSpacing(5);
+    
     m_wallpaperPreview = new WallpaperPreview;
-    m_splitter->addWidget(m_wallpaperPreview);
+    leftLayout->addWidget(m_wallpaperPreview, 1);
+    
+    // Add playlist control buttons
+    QHBoxLayout* playlistButtonsLayout = new QHBoxLayout;
+    playlistButtonsLayout->setContentsMargins(0, 0, 0, 0);
+    
+    m_addToPlaylistButton = new QPushButton("Add to Playlist");
+    m_addToPlaylistButton->setEnabled(false);
+    m_removeFromPlaylistButton = new QPushButton("Remove from Playlist");
+    m_removeFromPlaylistButton->setEnabled(false);
+    
+    playlistButtonsLayout->addWidget(m_addToPlaylistButton);
+    playlistButtonsLayout->addWidget(m_removeFromPlaylistButton);
+    playlistButtonsLayout->addStretch();
+    
+    leftLayout->addLayout(playlistButtonsLayout);
+    m_splitter->addWidget(leftWidget);
 
     // connect preview to manager so grid updates
     m_wallpaperPreview->setWallpaperManager(m_wallpaperManager);
+    
+    // connect playlist to manager so it can launch wallpapers
+    m_wallpaperPlaylist->setWallpaperManager(m_wallpaperManager);
 
     // right: properties panel with 4 tabs
     m_propertiesPanel = new PropertiesPanel;
@@ -198,6 +412,28 @@ void MainWindow::createCentralWidget()
         logLayout->addWidget(m_clearOutputButton);
         logLayout->addWidget(m_saveOutputButton);
     }
+    
+    // Add the "All Wallpapers" tab
+    m_mainTabWidget->addTab(allWallpapersTab, "All Wallpapers");
+    
+    // Load playlist from config before creating preview
+    qCDebug(mainWindow) << "MainWindow::createCentralWidget() - About to load playlist from config";
+    m_wallpaperPlaylist->loadFromConfig();
+    qCDebug(mainWindow) << "MainWindow::createCentralWidget() - Playlist loaded, about to create PlaylistPreview";
+    
+    // Create "Wallpaper Playlist" tab
+    m_playlistPreview = new PlaylistPreview(m_wallpaperPlaylist, m_wallpaperManager);
+    qCDebug(mainWindow) << "MainWindow::createCentralWidget() - PlaylistPreview created successfully";
+    m_mainTabWidget->addTab(m_playlistPreview, "Wallpaper Playlist");
+    qCDebug(mainWindow) << "MainWindow::createCentralWidget() - PlaylistPreview added to tab widget";
+
+    // Connect playlist button signals
+    connect(m_addToPlaylistButton, &QPushButton::clicked, this, &MainWindow::onAddToPlaylistClicked);
+    connect(m_removeFromPlaylistButton, &QPushButton::clicked, this, &MainWindow::onRemoveFromPlaylistClicked);
+    
+    // Connect playlist preview signals
+    connect(m_playlistPreview, &PlaylistPreview::wallpaperSelected, this, &MainWindow::onPlaylistWallpaperSelected);
+    connect(m_playlistPreview, &PlaylistPreview::removeFromPlaylistRequested, this, &MainWindow::onRemoveFromPlaylistRequested);
 
     // preview → selection
     connect(m_wallpaperPreview, &WallpaperPreview::wallpaperSelected,
@@ -223,8 +459,17 @@ void MainWindow::createCentralWidget()
 
 void MainWindow::loadSettings()
 {
-    // Restore window geometry
-    restoreGeometry(m_config.windowGeometry());
+    // Restore window geometry - but ensure window remains resizable
+    QByteArray savedGeometry = m_config.windowGeometry();
+    if (!savedGeometry.isEmpty()) {
+        restoreGeometry(savedGeometry);
+        
+        // Explicitly ensure the window can be resized after geometry restoration
+        setMinimumSize(400, 300);  // Set reasonable minimum size
+        setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);  // Remove any maximum size constraints
+        setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    }
+    
     restoreState(m_config.windowState());
     
     // Restore splitter state
@@ -449,12 +694,21 @@ void MainWindow::hideToTray()
 
 void MainWindow::quitApplication()
 {
+    qCDebug(mainWindow) << "quitApplication() called";
     m_isClosing = true;
     
-    // Hide tray icon
+    // Stop any running wallpapers
+    if (m_wallpaperManager) {
+        m_wallpaperManager->stopWallpaper();
+    }
+    
+    // Hide tray icon before quitting
     if (m_systemTrayIcon) {
         m_systemTrayIcon->hide();
     }
+    
+    // Save settings
+    saveSettings();
     
     // Close application
     QApplication::quit();
@@ -523,34 +777,26 @@ void MainWindow::initializeWithValidConfig()
     m_statusLabel->setText("Initializing... Loading wallpapers");
     QTimer::singleShot(500, this, &MainWindow::refreshWallpapers);
     
-    // Auto-restore last selected wallpaper
+    // Auto-restore last wallpaper or playlist state
     QString lastWallpaper = m_config.lastSelectedWallpaper();
-    qCDebug(mainWindow) << "Checking for last wallpaper to restore. Found:" << (lastWallpaper.isEmpty() ? "NONE" : lastWallpaper);
-    if (!lastWallpaper.isEmpty()) {
-        qCInfo(mainWindow) << "Will restore last wallpaper:" << lastWallpaper;
-        // Schedule wallpaper restoration after refresh completes
-        QTimer::singleShot(2000, this, [this, lastWallpaper]() {
-            // This will be called after refresh hopefully completes
-            qCDebug(mainWindow) << "Attempting to restore wallpaper:" << lastWallpaper;
-            
-            // Find the wallpaper by ID
-            WallpaperInfo wallpaperToRestore = m_wallpaperManager->getWallpaperById(lastWallpaper);
-            if (!wallpaperToRestore.id.isEmpty()) {
-                qCInfo(mainWindow) << "Found wallpaper to restore:" << wallpaperToRestore.name;
-                
-                // Update the UI to show the selected wallpaper
-                if (m_wallpaperPreview) {
-                    m_wallpaperPreview->selectWallpaper(wallpaperToRestore.id);
-                }
-                
-                // Launch the wallpaper automatically
-                onWallpaperLaunched(wallpaperToRestore);
-            } else {
-                qCWarning(mainWindow) << "Could not find wallpaper with ID:" << lastWallpaper;
-                // Clear the invalid wallpaper ID from config
-                m_config.setLastSelectedWallpaper("");
-            }
-        });
+    bool lastSessionUsedPlaylist = m_config.lastSessionUsedPlaylist();
+    qCDebug(mainWindow) << "Checking for last state to restore. Wallpaper:" << (lastWallpaper.isEmpty() ? "NONE" : lastWallpaper) 
+                       << "Used playlist:" << lastSessionUsedPlaylist;
+    
+    // Check if we need to restore state (either specific wallpaper or playlist-only)
+    if (!lastWallpaper.isEmpty() || lastSessionUsedPlaylist) {
+        if (!lastWallpaper.isEmpty()) {
+            qCInfo(mainWindow) << "Will restore last wallpaper:" << lastWallpaper << "from" << (lastSessionUsedPlaylist ? "playlist" : "individual selection");
+        } else if (lastSessionUsedPlaylist) {
+            qCInfo(mainWindow) << "Will restore playlist playback (no specific wallpaper ID saved)";
+        }
+        
+        // Store restoration state to be processed after WallpaperManager::refreshFinished signal
+        m_pendingPlaylistRestore = true;
+        m_pendingRestoreWallpaperId = lastWallpaper; // May be empty for playlist-only restoration
+        m_pendingRestoreFromPlaylist = lastSessionUsedPlaylist;
+        
+        qCDebug(mainWindow) << "Restoration state stored, will restore after wallpapers are loaded";
     }
 }
 
@@ -724,6 +970,61 @@ void MainWindow::onRefreshFinished()
             QMetaObject::invokeMethod(m_wallpaperPreview, "update");
         }
     });
+    
+    // Handle pending playlist restoration after wallpapers are loaded (timing fix)
+    if (m_pendingPlaylistRestore) {
+        qCDebug(mainWindow) << "Processing pending playlist restoration. Wallpaper ID:" << (m_pendingRestoreWallpaperId.isEmpty() ? "NONE" : m_pendingRestoreWallpaperId) 
+                           << "From playlist:" << m_pendingRestoreFromPlaylist;
+        
+        if (m_pendingRestoreFromPlaylist && m_wallpaperPlaylist) {
+            // Check if playlist is enabled and has wallpapers
+            PlaylistSettings playlistSettings = m_wallpaperPlaylist->getSettings();
+            if (playlistSettings.enabled && m_wallpaperPlaylist->size() > 0) {
+                qCInfo(mainWindow) << "Restoring playlist playback";
+                
+                // Switch to playlist tab to show the playlist is active
+                m_mainTabWidget->setCurrentIndex(1); // Wallpaper Playlist tab
+                
+                // Start playlist playback (this will launch the current/first wallpaper)
+                qCDebug(mainWindow) << "Calling m_wallpaperPlaylist->startPlayback()";
+                m_wallpaperPlaylist->startPlayback();
+                
+                // Update status
+                m_statusLabel->setText("Restored playlist playback");
+            } else {
+                qCWarning(mainWindow) << "Playlist was used last session but is now disabled or empty";
+                // Clear the playlist usage from config since it's no longer valid
+                m_config.setLastSessionUsedPlaylist(false);
+            }
+        } else if (!m_pendingRestoreWallpaperId.isEmpty()) {
+            // Find the wallpaper by ID for individual wallpaper restoration
+            WallpaperInfo wallpaperToRestore = m_wallpaperManager->getWallpaperById(m_pendingRestoreWallpaperId);
+            if (!wallpaperToRestore.id.isEmpty()) {
+                qCInfo(mainWindow) << "Found wallpaper to restore:" << wallpaperToRestore.name;
+                
+                // Individual wallpaper launch
+                qCInfo(mainWindow) << "Restoring individual wallpaper:" << wallpaperToRestore.name;
+                
+                // Update the UI to show the selected wallpaper
+                if (m_wallpaperPreview) {
+                    m_wallpaperPreview->selectWallpaper(wallpaperToRestore.id);
+                }
+                
+                // Launch the wallpaper automatically (this will mark it as individual launch)
+                onWallpaperLaunched(wallpaperToRestore);
+            } else {
+                qCWarning(mainWindow) << "Could not find wallpaper with ID:" << m_pendingRestoreWallpaperId;
+                // Clear the invalid wallpaper ID from config
+                m_config.setLastSelectedWallpaper("");
+                m_config.setLastSessionUsedPlaylist(false);
+            }
+        }
+        
+        // Clear the pending restoration state
+        m_pendingPlaylistRestore = false;
+        m_pendingRestoreWallpaperId.clear();
+        m_pendingRestoreFromPlaylist = false;
+    }
 }
 
 void MainWindow::onWallpaperSelected(const WallpaperInfo& wallpaper)
@@ -735,10 +1036,17 @@ void MainWindow::onWallpaperSelected(const WallpaperInfo& wallpaper)
             qCDebug(mainWindow) << "Setting wallpaper on properties panel";
             m_propertiesPanel->setWallpaper(wallpaper);
             m_statusLabel->setText(QString("Selected: %1").arg(wallpaper.name));
+            
+            // Update playlist button states
+            updatePlaylistButtonStates();
         } else {
             qCDebug(mainWindow) << "Clearing properties panel";
             m_propertiesPanel->clear();
             m_statusLabel->setText("Ready");
+            
+            // Disable playlist buttons when no wallpaper is selected
+            m_addToPlaylistButton->setEnabled(false);
+            m_removeFromPlaylistButton->setEnabled(false);
         }
     } catch (const std::exception& e) {
         qCCritical(mainWindow) << "Exception in onWallpaperSelected:" << e.what();
@@ -762,9 +1070,9 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
             return;
         }
         
-        qCDebug(mainWindow) << "Binary path configured, switching to output tab";
-        // Switch to output tab to show launch progress
-        m_rightTabWidget->setCurrentIndex(1); // Output tab
+        qCDebug(mainWindow) << "Binary path configured";
+        // Note: Tab switching removed - user requested to stay on current tab when launching wallpaper
+        // m_rightTabWidget->setCurrentIndex(3); // Would switch to Engine Log tab
         
         // Add safety check for wallpaper manager
         if (!m_wallpaperManager) {
@@ -772,6 +1080,14 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
             qCCritical(mainWindow) << errorMsg;
             QMessageBox::critical(this, "Internal Error", errorMsg);
             return;
+        }
+        
+        // Track if this launch is from playlist (check if playlist is currently enabled and running)
+        bool launchedFromPlaylist = false;
+        if (m_wallpaperPlaylist) {
+            PlaylistSettings playlistSettings = m_wallpaperPlaylist->getSettings();
+            launchedFromPlaylist = playlistSettings.enabled;
+            qCDebug(mainWindow) << "Launch from playlist:" << launchedFromPlaylist;
         }
         
         qCDebug(mainWindow) << "About to call wallpaper manager launch method";
@@ -868,10 +1184,41 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
             m_statusLabel->setText(QString("Launched: %1").arg(wallpaper.name));
             qCInfo(mainWindow) << "Successfully launched wallpaper:" << wallpaper.name;
             
+            // Check if launched wallpaper is in playlist and manage playlist accordingly
+            if (m_wallpaperPlaylist) {
+                bool wallpaperInPlaylist = m_wallpaperPlaylist->containsWallpaper(wallpaper.id);
+                PlaylistSettings playlistSettings = m_wallpaperPlaylist->getSettings();
+                
+                qCDebug(mainWindow) << "Wallpaper in playlist:" << wallpaperInPlaylist 
+                                   << "Playlist enabled:" << playlistSettings.enabled;
+                
+                if (wallpaperInPlaylist) {
+                    // Wallpaper IS in playlist - ensure playlist is running
+                    if (!playlistSettings.enabled) {
+                        qCInfo(mainWindow) << "Starting playlist - launched wallpaper is in playlist:" << wallpaper.id;
+                        m_wallpaperPlaylist->setEnabled(true);
+                    } else {
+                        qCDebug(mainWindow) << "Playlist continues - launched wallpaper is in playlist:" << wallpaper.id;
+                    }
+                } else {
+                    // Wallpaper is NOT in playlist - stop the playlist if it's running
+                    if (playlistSettings.enabled) {
+                        qCInfo(mainWindow) << "Stopping playlist - launched wallpaper not in playlist:" << wallpaper.id;
+                        m_wallpaperPlaylist->setEnabled(false);
+                    } else {
+                        qCDebug(mainWindow) << "Playlist already stopped - launched wallpaper not in playlist:" << wallpaper.id;
+                    }
+                }
+            }
+            
             // Save the wallpaper ID as the last selected wallpaper for auto-restore on next launch
             qCDebug(mainWindow) << "About to save wallpaper ID as last selected:" << wallpaper.id;
             m_config.setLastSelectedWallpaper(wallpaper.id);
             qCDebug(mainWindow) << "Saved last selected wallpaper ID:" << wallpaper.id;
+            
+            // Save whether this was launched from playlist
+            m_config.setLastSessionUsedPlaylist(launchedFromPlaylist);
+            qCDebug(mainWindow) << "Saved last session used playlist:" << launchedFromPlaylist;
             
             // Verify it was saved
             QString verification = m_config.lastSelectedWallpaper();
@@ -971,7 +1318,7 @@ void MainWindow::onOutputReceived(const QString& output)
     if (output.contains("ERROR") || output.contains("FAILED") || output.contains("WARNING") ||
         output.contains("Launching") || output.contains("Command:") || 
         output.contains("process finished") || output.contains("Stopping")) {
-        m_rightTabWidget->setCurrentIndex(1); // Output tab
+        m_rightTabWidget->setCurrentIndex(0); // Output tab
     }
 }
 
@@ -999,4 +1346,131 @@ void MainWindow::saveOutput()
             QMessageBox::warning(this, "Save Failed", "Could not save log file: " + file.errorString());
         }
     }
+}
+
+// Playlist-related slot implementations
+void MainWindow::onAddToPlaylistClicked()
+{
+    if (!m_wallpaperPreview || !m_wallpaperPlaylist) {
+        return;
+    }
+    
+    QString selectedWallpaperId = m_wallpaperPreview->getSelectedWallpaperId();
+    if (selectedWallpaperId.isEmpty()) {
+        QMessageBox::information(this, "Add to Playlist", "Please select a wallpaper first.");
+        return;
+    }
+    
+    if (m_wallpaperPlaylist->containsWallpaper(selectedWallpaperId)) {
+        QMessageBox::information(this, "Add to Playlist", "This wallpaper is already in the playlist.");
+        return;
+    }
+    
+    m_wallpaperPlaylist->addWallpaper(selectedWallpaperId);
+    
+    // Update button states
+    updatePlaylistButtonStates();
+    
+    m_statusLabel->setText("Wallpaper added to playlist");
+}
+
+void MainWindow::onRemoveFromPlaylistClicked()
+{
+    if (!m_wallpaperPreview || !m_wallpaperPlaylist) {
+        return;
+    }
+    
+    QString selectedWallpaperId = m_wallpaperPreview->getSelectedWallpaperId();
+    if (selectedWallpaperId.isEmpty()) {
+        QMessageBox::information(this, "Remove from Playlist", "Please select a wallpaper first.");
+        return;
+    }
+    
+    if (!m_wallpaperPlaylist->containsWallpaper(selectedWallpaperId)) {
+        QMessageBox::information(this, "Remove from Playlist", "This wallpaper is not in the playlist.");
+        return;
+    }
+    
+    auto result = QMessageBox::question(this, "Remove from Playlist", 
+        "Are you sure you want to remove this wallpaper from the playlist?");
+    
+    if (result == QMessageBox::Yes) {
+        m_wallpaperPlaylist->removeWallpaper(selectedWallpaperId);
+        
+        // Update button states
+        updatePlaylistButtonStates();
+        
+        m_statusLabel->setText("Wallpaper removed from playlist");
+    }
+}
+
+void MainWindow::onPlaylistWallpaperSelected(const QString& wallpaperId)
+{
+    if (!m_wallpaperManager) {
+        return;
+    }
+    
+    // Find wallpaper info and update properties panel
+    auto wallpaperInfo = m_wallpaperManager->getWallpaperInfo(wallpaperId);
+    if (wallpaperInfo.has_value()) {
+        // Convert to the WallpaperInfo struct format expected by onWallpaperSelected
+        WallpaperInfo info = wallpaperInfo.value();
+        onWallpaperSelected(info);
+        
+        // Switch to "All Wallpapers" tab to show details
+        m_mainTabWidget->setCurrentIndex(0);
+    }
+}
+
+void MainWindow::onRemoveFromPlaylistRequested(const QString& wallpaperId)
+{
+    if (!m_wallpaperPlaylist) {
+        return;
+    }
+    
+    auto result = QMessageBox::question(this, "Remove from Playlist", 
+        "Are you sure you want to remove this wallpaper from the playlist?");
+    
+    if (result == QMessageBox::Yes) {
+        m_wallpaperPlaylist->removeWallpaper(wallpaperId);
+        m_statusLabel->setText("Wallpaper removed from playlist");
+    }
+}
+
+void MainWindow::updatePlaylistButtonStates()
+{
+    if (!m_wallpaperPreview || !m_wallpaperPlaylist || !m_addToPlaylistButton || !m_removeFromPlaylistButton) {
+        return;
+    }
+    
+    QString selectedWallpaperId = m_wallpaperPreview->getSelectedWallpaperId();
+    
+    if (selectedWallpaperId.isEmpty()) {
+        // No wallpaper selected - disable both buttons
+        m_addToPlaylistButton->setEnabled(false);
+        m_removeFromPlaylistButton->setEnabled(false);
+    } else {
+        // Wallpaper selected - check if it's in playlist
+        bool inPlaylist = m_wallpaperPlaylist->containsWallpaper(selectedWallpaperId);
+        m_addToPlaylistButton->setEnabled(!inPlaylist);
+        m_removeFromPlaylistButton->setEnabled(inPlaylist);
+    }
+}
+
+void MainWindow::onWallpaperDroppedOnPlaylistTab(const QString& wallpaperId)
+{
+    if (!m_wallpaperPlaylist || wallpaperId.isEmpty()) {
+        return;
+    }
+    
+    if (m_wallpaperPlaylist->containsWallpaper(wallpaperId)) {
+        m_statusLabel->setText("Wallpaper is already in the playlist");
+        return;
+    }
+    
+    m_wallpaperPlaylist->addWallpaper(wallpaperId);
+    m_statusLabel->setText("Wallpaper added to playlist via drag and drop");
+    
+    // Update button states if this was the selected wallpaper
+    updatePlaylistButtonStates();
 }

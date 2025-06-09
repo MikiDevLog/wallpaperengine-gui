@@ -563,6 +563,18 @@ void ConfigManager::setRefreshInterval(int seconds)
     m_settings->sync();
 }
 
+bool ConfigManager::lastSessionUsedPlaylist() const
+{
+    return m_settings->value("General/last_session_used_playlist", false).toBool();
+}
+
+void ConfigManager::setLastSessionUsedPlaylist(bool usedPlaylist)
+{
+    qCDebug(configManager) << "ConfigManager::setLastSessionUsedPlaylist() writing:" << usedPlaylist;
+    m_settings->setValue("General/last_session_used_playlist", usedPlaylist);
+    m_settings->sync();
+}
+
 // Steam API settings
 QString ConfigManager::steamApiKey() const
 {

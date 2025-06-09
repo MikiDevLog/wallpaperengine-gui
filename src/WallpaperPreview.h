@@ -26,6 +26,8 @@
 #include <QTextOption>
 #include <QStyleOption>
 #include <QPainter>
+#include <QDrag>
+#include <QMimeData>
 #include "WallpaperManager.h"
 
 Q_DECLARE_LOGGING_CATEGORY(wallpaperPreview)
@@ -78,6 +80,7 @@ protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
 private:
@@ -130,6 +133,9 @@ private:
     // Add cancellation flag
     bool m_cancelled;
     bool m_workshopDataCancelled;
+    
+    // Drag and drop support
+    QPoint m_dragStartPosition;
 };
 
 class WallpaperPreview : public QWidget
@@ -145,6 +151,7 @@ public:
     void updateTheme();
     
     WallpaperInfo getSelectedWallpaper() const;
+    QString getSelectedWallpaperId() const;
 
     // Dynamic layout constants
     static constexpr int ITEMS_PER_PAGE = 20;

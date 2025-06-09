@@ -30,6 +30,10 @@
 #include <QDateTime>
 #include <QLoggingCategory>
 #include <QRandomGenerator>
+#include <QApplication>
+#include <QDrag>
+#include <QMimeData>
+#include <QCursor>
 
 Q_LOGGING_CATEGORY(wallpaperPreview, "app.wallpaperPreview")
 
@@ -50,6 +54,7 @@ WallpaperPreviewItem::WallpaperPreviewItem(const WallpaperInfo& wallpaper, QWidg
     , m_useCustomPainting(true)
     , m_cancelled(false)  // Initialize cancellation flag for animations
     , m_workshopDataCancelled(false)  // Initialize cancellation flag for workshop data
+    , m_dragStartPosition()
 {
     setFixedSize(ITEM_WIDTH, ITEM_HEIGHT + 20);
     setupUI();
@@ -740,6 +745,8 @@ void WallpaperPreviewItem::drawTextWithWordWrap(QPainter& painter, const QString
 void WallpaperPreviewItem::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
+        m_dragStartPosition = event->pos();
+        qCDebug(wallpaperPreview) << "Mouse pressed at position:" << event->pos() << "for wallpaper:" << m_wallpaper.name;
         emit clicked(m_wallpaper);
     }
     QWidget::mousePressEvent(event);
@@ -751,6 +758,50 @@ void WallpaperPreviewItem::mouseDoubleClickEvent(QMouseEvent* event)
         emit doubleClicked(m_wallpaper);
     }
     QWidget::mouseDoubleClickEvent(event);
+}
+
+void WallpaperPreviewItem::mouseMoveEvent(QMouseEvent* event)
+{
+    if (!(event->buttons() & Qt::LeftButton)) {
+        QWidget::mouseMoveEvent(event);
+        return;
+    }
+
+    int distance = (event->pos() - m_dragStartPosition).manhattanLength();
+    if (distance < QApplication::startDragDistance()) {
+        QWidget::mouseMoveEvent(event);
+        return;
+    }
+
+    qCDebug(wallpaperPreview) << "Starting drag operation for wallpaper:" << m_wallpaper.name << "with ID:" << m_wallpaper.id;
+
+    // Start drag operation
+    QDrag* drag = new QDrag(this);
+    QMimeData* mimeData = new QMimeData;
+    
+    // Set the wallpaper ID as MIME data
+    mimeData->setText(m_wallpaper.id);
+    mimeData->setData("application/x-wallpaper-id", m_wallpaper.id.toUtf8());
+    
+    drag->setMimeData(mimeData);
+    
+    // Create a drag pixmap from the preview
+    QPixmap dragPixmap;
+    if (!m_scaledPreview.isNull()) {
+        dragPixmap = m_scaledPreview.scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    } else {
+        dragPixmap = QPixmap(64, 64);
+        dragPixmap.fill(Qt::gray);
+    }
+    
+    drag->setPixmap(dragPixmap);
+    drag->setHotSpot(QPoint(dragPixmap.width() / 2, dragPixmap.height() / 2));
+    
+    // Execute the drag
+    Qt::DropAction dropAction = drag->exec(Qt::CopyAction);
+    qCDebug(wallpaperPreview) << "Drag completed with action:" << dropAction;
+    
+    QWidget::mouseMoveEvent(event);
 }
 
 void WallpaperPreviewItem::resizeEvent(QResizeEvent* event)
@@ -1544,6 +1595,14 @@ WallpaperInfo WallpaperPreview::getSelectedWallpaper() const
         return m_selectedItem->wallpaperInfo();
     }
     return WallpaperInfo();
+}
+
+QString WallpaperPreview::getSelectedWallpaperId() const
+{
+    if (m_selectedItem) {
+        return m_selectedItem->wallpaperInfo().id;
+    }
+    return QString();
 }
 
 QString WallpaperPreview::getWorkshopDirectory() const

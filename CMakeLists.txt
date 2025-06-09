@@ -32,6 +32,8 @@ set(SOURCES
     src/SettingsDialog.cpp
     src/ConfigManager.cpp
     src/SteamApiManager.cpp
+    src/WallpaperPlaylist.cpp
+    src/PlaylistPreview.cpp
 )
 
 # Header files
@@ -44,6 +46,8 @@ set(HEADERS
     src/SettingsDialog.h
     src/ConfigManager.h
     src/SteamApiManager.h
+    src/WallpaperPlaylist.h
+    src/PlaylistPreview.h
 )
 
 # Resource files

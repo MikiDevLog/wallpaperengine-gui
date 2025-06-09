@@ -74,7 +74,19 @@ void SettingsDialog::setupUI()
 QWidget* SettingsDialog::createPathsTab()
 {
     auto *widget = new QWidget;
-    auto *layout = new QVBoxLayout(widget);
+    auto *mainLayout = new QVBoxLayout(widget);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    
+    // Create scroll area for paths tab
+    auto *scrollArea = new QScrollArea;
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    
+    auto *scrollWidget = new QWidget;
+    auto *layout = new QVBoxLayout(scrollWidget);
+    layout->setContentsMargins(12, 12, 12, 12);
     
     // Wallpaper Engine Binary
     auto *engineGroup = new QGroupBox("Wallpaper Engine Binary");
@@ -201,13 +213,30 @@ QWidget* SettingsDialog::createPathsTab()
     layout->addWidget(libraryGroup);
     
     layout->addStretch();
+    
+    // Set the scroll widget
+    scrollArea->setWidget(scrollWidget);
+    mainLayout->addWidget(scrollArea);
+    
     return widget;
 }
 
 QWidget* SettingsDialog::createApiTab()
 {
     auto* widget = new QWidget;
-    auto* layout = new QVBoxLayout(widget);
+    auto* mainLayout = new QVBoxLayout(widget);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    
+    // Create scroll area for API tab
+    auto* scrollArea = new QScrollArea;
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    
+    auto* scrollWidget = new QWidget;
+    auto* layout = new QVBoxLayout(scrollWidget);
+    layout->setContentsMargins(12, 12, 12, 12);
     
     // Steam API Key section
     auto* apiGroup = new QGroupBox("Steam API Key");
@@ -290,13 +319,30 @@ QWidget* SettingsDialog::createApiTab()
             this, &SettingsDialog::onApiKeyTestFailed);
     
     layout->addStretch();
+    
+    // Set the scroll widget
+    scrollArea->setWidget(scrollWidget);
+    mainLayout->addWidget(scrollArea);
+    
     return widget;
 }
 
 QWidget* SettingsDialog::createThemeTab()
 {
     auto *widget = new QWidget;
-    auto *layout = new QVBoxLayout(widget);
+    auto *mainLayout = new QVBoxLayout(widget);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    
+    // Create scroll area for theme tab
+    auto *scrollArea = new QScrollArea;
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    
+    auto *scrollWidget = new QWidget;
+    auto *layout = new QVBoxLayout(scrollWidget);
+    layout->setContentsMargins(12, 12, 12, 12);
     
     // Create theme selection group
     auto *themeGroup = new QGroupBox("Application Theme");
@@ -339,6 +385,10 @@ QWidget* SettingsDialog::createThemeTab()
     
     layout->addWidget(themeGroup);
     layout->addStretch();
+    
+    // Set the scroll widget
+    scrollArea->setWidget(scrollWidget);
+    mainLayout->addWidget(scrollArea);
     
     return widget;
 }

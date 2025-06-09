@@ -121,6 +121,11 @@ public:
     
     QString lastSelectedWallpaper() const;
     void setLastSelectedWallpaper(const QString& wallpaperId);
+    
+    // Playlist state tracking
+    bool lastSessionUsedPlaylist() const;
+    void setLastSessionUsedPlaylist(bool usedPlaylist);
+    
     int refreshInterval() const;
     void setRefreshInterval(int seconds);
     

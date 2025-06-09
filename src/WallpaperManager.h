@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QDateTime>
 #include <QFileSystemWatcher>
+#include <optional>
 
 struct WallpaperInfo {
     QString id;
@@ -43,7 +44,8 @@ public:
     void refreshWallpapers();
     QList<WallpaperInfo> getAllWallpapers() const;
     WallpaperInfo getWallpaperById(const QString& id) const;
-    
+    std::optional<WallpaperInfo> getWallpaperInfo(const QString& id) const;
+
     bool launchWallpaper(const QString& wallpaperId, const QStringList& additionalArgs = QStringList());
     void stopWallpaper();
     bool isWallpaperRunning() const;
