@@ -12,11 +12,12 @@ You can manually check the linux-wallpaperengine call with the formatted string 
 
 ## Screenshots
 
-[1](screenshots/image.png)
-[2](screenshots/image2.png)
-[3](screenshots/image3.png)
-[4](screenshots/image4.png)
-[5](screenshots/image5.png)
+![1](screenshots/image.png)
+![2](screenshots/image2.png)
+![3](screenshots/image3.png)
+![4](screenshots/image4.png)
+![5](screenshots/image5.png)
+![6](screenshots/image6.png)
 
 ## Prerequisites
 
