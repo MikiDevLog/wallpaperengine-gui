@@ -15,7 +15,9 @@
 #include <QMap>
 #include <QVariant>
 #include <QTabWidget>
+#include <QTabBar>
 #include <QMessageBox>
+#include <QEvent>
 
 // These were missing or in wrong order - add them before the WallpaperSettings struct
 #include <QCheckBox>
@@ -68,6 +70,11 @@ public:
     void setWallpaper(const WallpaperInfo& wallpaper);
     void setWallpaperManager(WallpaperManager* manager);
     void clear();
+    
+    // Unsaved changes handling - made public for MainWindow access
+    bool hasUnsavedChanges() const;
+    bool showUnsavedChangesDialog();
+    void resetUnsavedChanges();
 
 signals:
     void launchWallpaper(const WallpaperInfo& wallpaper);
@@ -87,7 +94,10 @@ private slots:
     void onScreenRootChanged(const QString& screenRoot);
     
     // New slots for unsaved changes handling
-    void onTabChangeRequested(int index);
+    void onTabBarClicked(int index);
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void setupUI();
@@ -117,10 +127,8 @@ private:
     QStringList getAvailableScreens() const;
     
     // New methods for unsaved changes handling
-    bool hasUnsavedChanges() const;
-    bool showUnsavedChangesDialog();
-    void resetUnsavedChanges();
     bool checkUnsavedChangesBeforeAction();
+    bool handleTabClickWithUnsavedCheck(int index);
     
     // UI Components - reordered to match constructor initialization order
     QLabel* m_nameLabel;
@@ -186,7 +194,6 @@ private:
     
     // New member variables for unsaved changes handling
     bool m_ignoreTabChange;
-    int m_pendingTabIndex;
     
     // Helper methods for Steam API data
     void updateSteamApiMetadata(const WallpaperInfo& wallpaper);

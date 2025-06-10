@@ -29,6 +29,7 @@
 #include <QScreen>
 #include <QProcess>
 #include <QLoggingCategory>
+#include <QMouseEvent>
 
 Q_LOGGING_CATEGORY(propertiesPanel, "app.propertiespanel")
 
@@ -141,7 +142,6 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_settingsModified(false)
     , m_isWallpaperRunning(false)
     , m_ignoreTabChange(false)
-    , m_pendingTabIndex(-1)
 {
     setupUI();
     
@@ -187,8 +187,8 @@ void PropertiesPanel::setupUI()
 {
     m_innerTabWidget = new QTabWidget;
     
-    // Connect tab change signal to check for unsaved changes
-    connect(m_innerTabWidget, &QTabWidget::currentChanged, this, &PropertiesPanel::onTabChangeRequested);
+    // Install event filter on the tab bar to intercept mouse clicks BEFORE they change tabs
+    m_innerTabWidget->tabBar()->installEventFilter(this);
     
     // Info page (just the preview & basic info)
     QWidget* infoPage = new QWidget;
@@ -1831,15 +1831,41 @@ void PropertiesPanel::startPreviewAnimation()
     }
 }
 
-// Unsaved changes handling methods
-void PropertiesPanel::onTabChangeRequested(int index)
+// Event filter to intercept tab clicks before they change tabs
+bool PropertiesPanel::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_innerTabWidget->tabBar() && 
+        event->type() == QEvent::MouseButtonPress) {
+        
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::LeftButton) {
+            // Get the tab index at the click position
+            QTabBar *tabBar = m_innerTabWidget->tabBar();
+            int clickedIndex = tabBar->tabAt(mouseEvent->pos());
+            
+            if (clickedIndex >= 0) {
+                return handleTabClickWithUnsavedCheck(clickedIndex);
+            }
+        }
+    }
+    
+    return QWidget::eventFilter(watched, event);
+}
+
+// Handle tab click with unsaved changes check
+bool PropertiesPanel::handleTabClickWithUnsavedCheck(int index)
 {
     if (m_ignoreTabChange) {
         // Allow the tab change to proceed without checking
-        return;
+        return false; // Don't consume the event
     }
     
     int currentIndex = m_innerTabWidget->currentIndex();
+    
+    // If clicking the same tab, no need to check
+    if (currentIndex == index) {
+        return false; // Don't consume the event
+    }
     
     // Check if we're leaving a tab with unsaved changes
     bool hasUnsaved = false;
@@ -1850,28 +1876,29 @@ void PropertiesPanel::onTabChangeRequested(int index)
     }
     
     if (hasUnsaved) {
-        // Store the requested tab index
-        m_pendingTabIndex = index;
-        
-        // Block the tab change temporarily
-        m_ignoreTabChange = true;
-        m_innerTabWidget->setCurrentIndex(currentIndex);
-        m_ignoreTabChange = false;
-        
         // Show the confirmation dialog
         if (showUnsavedChangesDialog()) {
             // User chose to discard changes
             resetUnsavedChanges();
             
-            // Now allow the tab change
+            // Allow the tab change by programmatically setting it
             m_ignoreTabChange = true;
             m_innerTabWidget->setCurrentIndex(index);
             m_ignoreTabChange = false;
         }
-        // If user chose to stay, do nothing (tab stays on current)
-        m_pendingTabIndex = -1;
+        // If user chose to stay, consume the event to prevent the tab change
+        return true; // Consume the event to prevent default behavior
+    } else {
+        // No unsaved changes, allow the click to proceed normally
+        return false; // Don't consume the event
     }
-    // If no unsaved changes, allow tab change to proceed normally
+}
+
+// Legacy method - no longer used but kept for compatibility
+void PropertiesPanel::onTabBarClicked(int index)
+{
+    // This method is no longer used since we're using event filtering
+    Q_UNUSED(index)
 }
 
 bool PropertiesPanel::hasUnsavedChanges() const

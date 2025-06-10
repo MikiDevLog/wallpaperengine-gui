@@ -19,6 +19,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
+#include <QEvent>
 
 class WallpaperPreview;
 class PropertiesPanel;
@@ -66,6 +67,7 @@ public:
 protected:
     void closeEvent(QCloseEvent *event) override;
     void changeEvent(QEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
     void openSettings();
@@ -91,6 +93,9 @@ private slots:
     void onRemoveFromPlaylistRequested(const QString& wallpaperId);
     void onWallpaperDroppedOnPlaylistTab(const QString& wallpaperId);
     
+    // Main tab change handling for unsaved changes
+    void onMainTabBarClicked(int index);
+    
     // System tray slots
     void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason);
     void showWindow();
@@ -112,6 +117,9 @@ private:
     void setupSystemTray();
     void createTrayMenu();
     void updatePlaylistButtonStates();
+    
+    // Main tab unsaved changes handling
+    bool handleMainTabClickWithUnsavedCheck(int index);
     
     // Launch helper method
     void launchWallpaperWithSource(const WallpaperInfo& wallpaper, LaunchSource source);
@@ -156,6 +164,9 @@ private:
     bool m_startMinimized;
     bool m_isLaunchingWallpaper; // Track when we're launching a new wallpaper
     LaunchSource m_lastLaunchSource; // Track the source of the last wallpaper launch
+    
+    // Main tab unsaved changes handling
+    bool m_ignoreMainTabChange;
     
     // Playlist restoration state (for timing fix)
     bool m_pendingPlaylistRestore;

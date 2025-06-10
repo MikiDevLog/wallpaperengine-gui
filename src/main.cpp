@@ -97,7 +97,7 @@ static void setupApplicationMetadata()
 {
     QApplication::setApplicationName("Wallpaper Engine GUI");
     QApplication::setApplicationDisplayName("Wallpaper Engine GUI");
-    QApplication::setApplicationVersion("1.0.0");
+    QApplication::setApplicationVersion("1.1.0");
     QApplication::setOrganizationName("WallpaperEngine");
     QApplication::setOrganizationDomain("wallpaperengine.io");
     QApplication::setDesktopFileName("wallpaperengine-gui");

@@ -29,6 +29,8 @@
 #include <QFileDialog>
 #include <QLoggingCategory>
 #include <QSystemTrayIcon>
+#include <QMouseEvent>
+#include <QMouseEvent>
 #include <QMenu>
 #include <QAction>
 #include <QPainter>
@@ -188,6 +190,8 @@ MainWindow::MainWindow(QWidget *parent)
     , m_wallpaperPreview(nullptr)
     , m_propertiesPanel(nullptr)
     , m_playlistPreview(nullptr)
+    , m_addToPlaylistButton(nullptr)
+    , m_removeFromPlaylistButton(nullptr)
     , m_refreshAction(nullptr)
     , m_settingsAction(nullptr)
     , m_aboutAction(nullptr)
@@ -195,8 +199,6 @@ MainWindow::MainWindow(QWidget *parent)
     , m_statusLabel(nullptr)
     , m_wallpaperCountLabel(nullptr)
     , m_progressBar(nullptr)
-    , m_addToPlaylistButton(nullptr)
-    , m_removeFromPlaylistButton(nullptr)
     , m_config(ConfigManager::instance())
     , m_wallpaperManager(new WallpaperManager(this))
     , m_wallpaperPlaylist(new WallpaperPlaylist(this))
@@ -205,6 +207,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_startMinimized(false)
     , m_isLaunchingWallpaper(false)
     , m_lastLaunchSource(LaunchSource::Manual)
+    , m_ignoreMainTabChange(false)
     , m_pendingPlaylistRestore(false)
     , m_pendingRestoreWallpaperId("")
     , m_pendingRestoreFromPlaylist(false)
@@ -349,6 +352,9 @@ void MainWindow::createCentralWidget()
     // Create main tab widget for "All Wallpapers" and "Wallpaper Playlist"
     m_mainTabWidget = new DropTabWidget;
     setCentralWidget(m_mainTabWidget);
+    
+    // Install event filter on the main tab bar to intercept clicks for unsaved changes
+    m_mainTabWidget->tabBar()->installEventFilter(this);
     
     // Connect drop signal
     connect(m_mainTabWidget, &DropTabWidget::wallpaperDroppedOnPlaylistTab,
@@ -1047,6 +1053,9 @@ void MainWindow::onRefreshFinished()
                     if (m_propertiesPanel) {
                         m_propertiesPanel->setWallpaper(wallpaperToRestore);
                     }
+                    
+                    // Update playlist button states for the restored wallpaper
+                    updatePlaylistButtonStates();
                 });
                 
                 // Update status to indicate the wallpaper was launched
@@ -1354,7 +1363,7 @@ void MainWindow::showAbout()
 {
     QMessageBox::about(this, "About Wallpaper Engine GUI",
         "<h3>Wallpaper Engine GUI</h3>"
-        "<p>Version 1.0.0</p>"
+        "<p>Version 1.1.0</p>"
         "<p>A graphical user interface for linux-wallpaperengine, providing easy access "
         "to Steam Workshop wallpapers on Linux.</p>"
         "<p><b>Features:</b></p>"
@@ -1417,6 +1426,74 @@ void MainWindow::saveOutput()
             QMessageBox::warning(this, "Save Failed", "Could not save log file: " + file.errorString());
         }
     }
+}
+
+// Event filter to intercept main tab clicks for unsaved changes handling
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_mainTabWidget->tabBar() && 
+        event->type() == QEvent::MouseButtonPress) {
+        
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::LeftButton) {
+            // Get the tab index at the click position
+            QTabBar *tabBar = m_mainTabWidget->tabBar();
+            int clickedIndex = tabBar->tabAt(mouseEvent->pos());
+            
+            if (clickedIndex >= 0) {
+                return handleMainTabClickWithUnsavedCheck(clickedIndex);
+            }
+        }
+    }
+    
+    return QMainWindow::eventFilter(watched, event);
+}
+
+// Handle main tab click with unsaved changes check
+bool MainWindow::handleMainTabClickWithUnsavedCheck(int index)
+{
+    if (m_ignoreMainTabChange) {
+        // Allow the tab change to proceed without checking
+        return false; // Don't consume the event
+    }
+    
+    int currentIndex = m_mainTabWidget->currentIndex();
+    
+    // If clicking the same tab, no need to check
+    if (currentIndex == index) {
+        return false; // Don't consume the event
+    }
+    
+    // Check if the properties panel has unsaved changes
+    bool hasUnsaved = false;
+    if (m_propertiesPanel) {
+        hasUnsaved = m_propertiesPanel->hasUnsavedChanges();
+    }
+    
+    if (hasUnsaved) {
+        // Show confirmation dialog using the PropertiesPanel's dialog
+        if (m_propertiesPanel->showUnsavedChangesDialog()) {
+            // User chose to discard changes
+            m_propertiesPanel->resetUnsavedChanges();
+            
+            // Allow the tab change by programmatically setting it
+            m_ignoreMainTabChange = true;
+            m_mainTabWidget->setCurrentIndex(index);
+            m_ignoreMainTabChange = false;
+        }
+        // If user chose to stay, consume the event to prevent the tab change
+        return true; // Consume the event to prevent default behavior
+    } else {
+        // No unsaved changes, allow the click to proceed normally
+        return false; // Don't consume the event
+    }
+}
+
+// Legacy method for compatibility - no longer used
+void MainWindow::onMainTabBarClicked(int index)
+{
+    // This method is no longer used since we're using event filtering
+    Q_UNUSED(index)
 }
 
 // Playlist-related slot implementations
@@ -1513,40 +1590,54 @@ void MainWindow::onRemoveFromPlaylistRequested(const QString& wallpaperId)
     }
 }
 
-void MainWindow::updatePlaylistButtonStates()
-{
-    if (!m_wallpaperPreview || !m_wallpaperPlaylist || !m_addToPlaylistButton || !m_removeFromPlaylistButton) {
-        return;
-    }
-    
-    QString selectedWallpaperId = m_wallpaperPreview->getSelectedWallpaperId();
-    
-    if (selectedWallpaperId.isEmpty()) {
-        // No wallpaper selected - disable both buttons
-        m_addToPlaylistButton->setEnabled(false);
-        m_removeFromPlaylistButton->setEnabled(false);
-    } else {
-        // Wallpaper selected - check if it's in playlist
-        bool inPlaylist = m_wallpaperPlaylist->containsWallpaper(selectedWallpaperId);
-        m_addToPlaylistButton->setEnabled(!inPlaylist);
-        m_removeFromPlaylistButton->setEnabled(inPlaylist);
-    }
-}
-
 void MainWindow::onWallpaperDroppedOnPlaylistTab(const QString& wallpaperId)
 {
-    if (!m_wallpaperPlaylist || wallpaperId.isEmpty()) {
+    if (!m_wallpaperPlaylist) {
         return;
     }
     
     if (m_wallpaperPlaylist->containsWallpaper(wallpaperId)) {
-        m_statusLabel->setText("Wallpaper is already in the playlist");
+        QMessageBox::information(this, "Add to Playlist", "This wallpaper is already in the playlist.");
         return;
     }
     
     m_wallpaperPlaylist->addWallpaper(wallpaperId);
-    m_statusLabel->setText("Wallpaper added to playlist via drag and drop");
     
-    // Update button states if this was the selected wallpaper
+    // Update button states
     updatePlaylistButtonStates();
+    
+    m_statusLabel->setText("Wallpaper added to playlist via drag and drop");
+}
+
+void MainWindow::updatePlaylistButtonStates()
+{
+    if (!m_wallpaperPreview || !m_wallpaperPlaylist) {
+        return;
+    }
+    
+    QString selectedWallpaperId = m_wallpaperPreview->getSelectedWallpaperId();
+    bool hasSelection = !selectedWallpaperId.isEmpty();
+    bool isInPlaylist = hasSelection && m_wallpaperPlaylist->containsWallpaper(selectedWallpaperId);
+    
+    // Update the main playlist buttons using member variables
+    if (m_addToPlaylistButton) {
+        m_addToPlaylistButton->setEnabled(hasSelection && !isInPlaylist);
+        m_addToPlaylistButton->setText(isInPlaylist ? "Already in Playlist" : "Add to Playlist");
+    }
+    
+    if (m_removeFromPlaylistButton) {
+        m_removeFromPlaylistButton->setEnabled(hasSelection && isInPlaylist);
+        m_removeFromPlaylistButton->setText(isInPlaylist ? "Remove from Playlist" : "Remove from Playlist");
+    }
+    
+    // Update any menu actions if they exist
+    auto addToPlaylistAction = findChild<QAction*>("actionAddToPlaylist");
+    if (addToPlaylistAction) {
+        addToPlaylistAction->setEnabled(hasSelection && !isInPlaylist);
+    }
+    
+    auto removeFromPlaylistAction = findChild<QAction*>("actionRemoveFromPlaylist");
+    if (removeFromPlaylistAction) {
+        removeFromPlaylistAction->setEnabled(hasSelection && isInPlaylist);
+    }
 }
