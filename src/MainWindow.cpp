@@ -1028,16 +1028,29 @@ void MainWindow::onRefreshFinished()
             if (!wallpaperToRestore.id.isEmpty()) {
                 qCInfo(mainWindow) << "Found wallpaper to restore:" << wallpaperToRestore.name;
                 
-                // Individual wallpaper launch
-                qCInfo(mainWindow) << "Restoring individual wallpaper:" << wallpaperToRestore.name;
-                
-                // Update the UI to show the selected wallpaper
-                if (m_wallpaperPreview) {
-                    m_wallpaperPreview->selectWallpaper(wallpaperToRestore.id);
-                }
+                // Both playlist and manual wallpapers should auto-launch + be visually selected on startup
+                qCInfo(mainWindow) << "Restoring wallpaper with auto-launch:" << wallpaperToRestore.name 
+                                   << "(from" << (m_pendingRestoreFromPlaylist ? "playlist" : "manual launch") << ")";
                 
                 // Launch the wallpaper automatically (this will mark it as startup restoration)
                 launchWallpaperWithSource(wallpaperToRestore, LaunchSource::StartupRestore);
+                
+                // Update the UI to show the selected wallpaper (with pagination navigation and scrolling)
+                // This needs to happen after launch because the grid gets refreshed after wallpaper manager signals
+                QTimer::singleShot(200, this, [this, wallpaperToRestore]() {
+                    if (m_wallpaperPreview) {
+                        qCDebug(mainWindow) << "Selecting restored wallpaper in grid:" << wallpaperToRestore.name;
+                        m_wallpaperPreview->selectWallpaper(wallpaperToRestore.id);
+                    }
+                    
+                    // Update properties panel to show the wallpaper details
+                    if (m_propertiesPanel) {
+                        m_propertiesPanel->setWallpaper(wallpaperToRestore);
+                    }
+                });
+                
+                // Update status to indicate the wallpaper was launched
+                m_statusLabel->setText(QString("Restored: %1").arg(wallpaperToRestore.name));
             } else {
                 qCWarning(mainWindow) << "Could not find wallpaper with ID:" << m_pendingRestoreWallpaperId;
                 // Clear the invalid wallpaper ID from config
