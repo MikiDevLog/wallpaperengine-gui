@@ -1,11 +1,15 @@
 # WallpaperEngine GUI
 
 GUI for the [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine).
-- Mostly automated.
+- Mostly automated first setup.
 - Can get information about wallpaper based on workshop id using Steam API and store it. [You need to get API key for that](https://steamcommunity.com/dev/apikey) any domain name will do.
 - Support QT Themes for KDE users.
-- Somewhat usable in terms of design.
+- Somewhat usable in terms of design (but now even better).
 - Restore previous state on restart.
+- Has playlist support
+- Has support for changing wallpaper properties that are specified in project.json with the ability to save them between launches and roll back to the default state
+- Has support for individual settings (settings specific to linux-wallpaperengine) for running wallpapers
+- Has support for working in the system tray
 
 If you're using Fedora and KDE+Wayland (like me), you may have problems initializing GLEW for web wallpapers etc. I'll try to fix and test what's going on and report back. The app will report it as code 5. (there was a false alarm which I fixed but you need to check the engine log for any suspicious events.)
 You can manually check the linux-wallpaperengine call with the formatted string used by the app in the Engine Log tab of your terminal to see if it's a GUI or binary issue.
