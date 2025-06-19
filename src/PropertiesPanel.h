@@ -95,6 +95,7 @@ private slots:
     
     // New slots for unsaved changes handling
     void onTabBarClicked(int index);
+    void copyWallpaperIdToClipboard();
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -141,6 +142,8 @@ private:
     QLabel* m_subscriptionsLabel;
     QLabel* m_favoritesLabel;
     QLabel* m_previewLabel;
+    QLabel* m_previewIdLabel;  // Displays current wallpaper ID
+    QPushButton* m_copyIdButton;  // Button to copy wallpaper ID
     QTextEdit* m_descriptionEdit;
     QPushButton* m_launchButton;
     QPushButton* m_savePropertiesButton;

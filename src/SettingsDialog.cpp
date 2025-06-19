@@ -19,6 +19,7 @@
 #include <QDir>
 #include <QProcess>
 #include <QStyleFactory>
+#include <QClipboard>
 
 SettingsDialog::SettingsDialog(QWidget *parent)
     : QDialog(parent)
@@ -244,12 +245,17 @@ QWidget* SettingsDialog::createApiTab()
     
     auto* apiInfoLabel = new QLabel(
         "Enter your Steam Web API key to fetch detailed information about wallpapers.\n"
-        "You can get a free API key from: https://steamcommunity.com/dev/apikey\n"
+        "You can get a free API key from: <a href=\"https://steamcommunity.com/dev/apikey\">https://steamcommunity.com/dev/apikey</a>\n"
         "This allows the application to show metadata such as author, description, and update dates."
     );
     apiInfoLabel->setWordWrap(true);
-    apiInfoLabel->setOpenExternalLinks(true);
+    apiInfoLabel->setTextFormat(Qt::RichText);
+    apiInfoLabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    apiInfoLabel->setOpenExternalLinks(false);
+    apiInfoLabel->setToolTip("Click the link to copy the URL to clipboard");
     apiLayout->addWidget(apiInfoLabel);
+    connect(apiInfoLabel, &QLabel::linkActivated,
+            this, &SettingsDialog::copyApiKeyUrlToClipboard);
     
     auto* apiKeyLayout = new QHBoxLayout;
     m_apiKeyEdit = new QLineEdit;
@@ -732,4 +738,12 @@ void SettingsDialog::onApiKeyTestFailed(const QString& error)
     m_testResultLabel->setStyleSheet("color: red;");
     m_apiStatusLabel->setText("Steam API key configuration issue");
     m_apiStatusLabel->setStyleSheet("color: red;");
+}
+
+// Slot to copy the Steam API key URL to clipboard
+void SettingsDialog::copyApiKeyUrlToClipboard(const QString& url)
+{
+    QClipboard *clipboard = QApplication::clipboard();
+    clipboard->setText(url);
+    QMessageBox::information(this, tr("Link Copied"), tr("Steam API key URL copied to clipboard."));
 }

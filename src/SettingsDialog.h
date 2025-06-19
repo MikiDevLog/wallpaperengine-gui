@@ -41,6 +41,7 @@ private slots:
     void toggleApiKeyVisibility(bool show);
     void onApiKeyTestSucceeded();
     void onApiKeyTestFailed(const QString& error);
+    void copyApiKeyUrlToClipboard(const QString& url);
 
 private:
     void setupUI();

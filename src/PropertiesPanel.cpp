@@ -30,6 +30,7 @@
 #include <QProcess>
 #include <QLoggingCategory>
 #include <QMouseEvent>
+#include <QClipboard>
 
 Q_LOGGING_CATEGORY(propertiesPanel, "app.propertiespanel")
 
@@ -144,7 +145,8 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_ignoreTabChange(false)
 {
     setupUI();
-    
+    // Connect copy button signal
+    connect(m_copyIdButton, &QPushButton::clicked, this, &PropertiesPanel::copyWallpaperIdToClipboard);
     // Connect signals for property changes
     connect(m_savePropertiesButton, &QPushButton::clicked, this, &PropertiesPanel::onSavePropertiesClicked);
     connect(m_resetPropertiesButton, &QPushButton::clicked, this, &PropertiesPanel::onResetPropertiesClicked);
@@ -221,6 +223,18 @@ void PropertiesPanel::setupUI()
        setPlaceholderPreview("No wallpaper selected");
        
        previewLayout->addWidget(m_previewLabel, 0, Qt::AlignCenter);
+       // Add ID display and copy button below preview
+       {
+           QHBoxLayout* idLayout = new QHBoxLayout;
+           idLayout->setContentsMargins(0, 8, 0, 0);
+           idLayout->addWidget(new QLabel("ID:"));
+           m_previewIdLabel = new QLabel("-");
+           idLayout->addWidget(m_previewIdLabel);
+           m_copyIdButton = new QPushButton("Copy");
+           idLayout->addWidget(m_copyIdButton);
+           idLayout->addStretch();
+           previewLayout->addLayout(idLayout);
+       }
        // Remove fixed height to allow natural sizing
        l->addWidget(previewSection);
        
@@ -558,7 +572,9 @@ void PropertiesPanel::setWallpaper(const WallpaperInfo& wallpaper)
     }
     
     m_currentWallpaper = wallpaper;
-    
+    // Update ID label
+    m_previewIdLabel->setText(wallpaper.id.isEmpty() ? "-" : wallpaper.id);
+
     // Update basic info
     m_nameLabel->setText(wallpaper.name.isEmpty() ? "Unknown" : wallpaper.name);
     m_authorLabel->setText(wallpaper.author.isEmpty() ? "Unknown" : wallpaper.author);
@@ -1944,4 +1960,15 @@ bool PropertiesPanel::checkUnsavedChangesBeforeAction()
         return showUnsavedChangesDialog();
     }
     return true; // No unsaved changes, proceed
+}
+
+// Slot implementation for copying wallpaper ID
+void PropertiesPanel::copyWallpaperIdToClipboard()
+{
+    if (m_currentWallpaper.id.isEmpty()) {
+        return;
+    }
+    QClipboard* clipboard = QApplication::clipboard();
+    clipboard->setText(m_currentWallpaper.id);
+    QMessageBox::information(this, "Copy Wallpaper ID", "Wallpaper ID copied to clipboard.");
 }
