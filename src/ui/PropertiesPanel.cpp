@@ -31,6 +31,7 @@
 #include <QLoggingCategory>
 #include <QMouseEvent>
 #include <QClipboard>
+#include <QTimer>
 
 Q_LOGGING_CATEGORY(propertiesPanel, "app.propertiespanel")
 
@@ -44,57 +45,64 @@ QStringList WallpaperSettings::toCommandLineArgs() const
         args << "--silent";
     }
     
-    if (volume != 15) { // Only add if different from default
-        args << "--volume" << QString::number(volume);
+    if (volume != 15) { // Convert from 0-100 to 0.0-1.0 for WNEL
+        double volumeDecimal = volume / 100.0;
+        args << "--volume" << QString::number(volumeDecimal, 'f', 2);
     }
     
     if (noAutoMute) {
         args << "--noautomute";
     }
     
-    if (noAudioProcessing) {
-        args << "--no-audio-processing";
-    }
+    // Note: noAudioProcessing is not supported by WNEL, so it's removed
     
     // Performance settings
     if (fps != 30) { // Only add if different from default
         args << "--fps" << QString::number(fps);
     }
-    
-    // Display settings
-    if (!windowGeometry.isEmpty()) {
-        args << "--window" << windowGeometry;
-    }
-    
+     // Display settings - Use WNEL's --output flag instead of --screen-root
     if (!screenRoot.isEmpty()) {
-        args << "--screen-root" << screenRoot;
-        
-        if (!backgroundId.isEmpty()) {
-            args << "--bg" << backgroundId;
-        }
+        args << "--output" << screenRoot;
     }
-    
+
     if (scaling != "default") {
+        // WNEL scaling modes: stretch, fit, fill, default
         args << "--scaling" << scaling;
     }
     
-    if (clamping != "clamp") {
-        args << "--clamping" << clamping;
+    // WNEL-specific settings
+    if (noLoop) {
+        args << "--no-loop";
     }
     
-    // Behavior settings
-    if (disableMouse) {
-        args << "--disable-mouse";
+    if (noHardwareDecode) {
+        args << "--no-hardware-decode";
     }
     
-    if (disableParallax) {
-        args << "--disable-parallax";
+    if (forceX11) {
+        args << "--force-x11";
     }
     
-    if (noFullscreenPause) {
-        args << "--no-fullscreen-pause";
+    if (forceWayland) {
+        args << "--force-wayland";
     }
     
+    if (verbose) {
+        args << "--verbose";
+    }
+    
+    if (logLevel != "info") {
+        args << "--log-level" << logLevel;
+    }
+    
+    if (!mpvOptions.isEmpty()) {
+        args << "--mpv-options" << mpvOptions;
+    }
+
+    // Note: Other arguments like clamping, windowGeometry, backgroundId, 
+    // disableMouse, disableParallax, noFullscreenPause are not supported 
+    // by WNEL and are removed
+
     return args;
 }
 
@@ -132,6 +140,15 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_disableMouseCheckBox(new QCheckBox("Disable mouse interaction"))
     , m_disableParallaxCheckBox(new QCheckBox("Disable parallax effects"))
     , m_noFullscreenPauseCheckBox(new QCheckBox("Don't pause when apps go fullscreen"))
+    , m_externalNameEdit(new QLineEdit)
+    , m_saveExternalNameButton(new QPushButton("Save Name"))
+    , m_noLoopCheckBox(new QCheckBox("Don't loop video"))
+    , m_noHardwareDecodeCheckBox(new QCheckBox("Disable hardware decoding"))
+    , m_forceX11CheckBox(new QCheckBox("Force X11 backend"))
+    , m_forceWaylandCheckBox(new QCheckBox("Force Wayland backend"))
+    , m_verboseCheckBox(new QCheckBox("Verbose output"))
+    , m_logLevelCombo(new QComboBox)
+    , m_mpvOptionsEdit(new QLineEdit)
     , m_currentWallpaper()
     , m_currentSettings()
     , m_wallpaperManager(nullptr)
@@ -143,6 +160,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_settingsModified(false)
     , m_isWallpaperRunning(false)
     , m_ignoreTabChange(false)
+    , m_userInteractingWithTabs(false)
 {
     setupUI();
     // Connect copy button signal
@@ -225,7 +243,8 @@ void PropertiesPanel::setupUI()
        previewLayout->addWidget(m_previewLabel, 0, Qt::AlignCenter);
        // Add ID display and copy button below preview
        {
-           QHBoxLayout* idLayout = new QHBoxLayout;
+           m_idSection = new QWidget;
+           QHBoxLayout* idLayout = new QHBoxLayout(m_idSection);
            idLayout->setContentsMargins(0, 8, 0, 0);
            idLayout->addWidget(new QLabel("ID:"));
            m_previewIdLabel = new QLabel("-");
@@ -233,7 +252,7 @@ void PropertiesPanel::setupUI()
            m_copyIdButton = new QPushButton("Copy");
            idLayout->addWidget(m_copyIdButton);
            idLayout->addStretch();
-           previewLayout->addLayout(idLayout);
+           previewLayout->addWidget(m_idSection);
        }
        // Remove fixed height to allow natural sizing
        l->addWidget(previewSection);
@@ -293,13 +312,26 @@ void PropertiesPanel::setupUI()
        infoLayout->addRow(createFormLabel("Author:"), m_authorLabel);
        infoLayout->addRow(createFormLabel("Type:"), m_typeLabel);
        infoLayout->addRow(createFormLabel("File Size:"), m_fileSizeLabel);
-       infoLayout->addRow(createFormLabel("Posted:"), m_postedLabel);
-       infoLayout->addRow(createFormLabel("Updated:"), m_updatedLabel);
-       infoLayout->addRow(createFormLabel("Views:"), m_viewsLabel);
-       infoLayout->addRow(createFormLabel("Subscriptions:"), m_subscriptionsLabel);
-       infoLayout->addRow(createFormLabel("Favorites:"), m_favoritesLabel);
        
        l->addWidget(infoSection);
+       
+       // Steam-specific metadata section (hidden for external wallpapers)
+       m_steamSection = new QGroupBox("Steam Workshop Information");
+       auto* steamLayout = new QFormLayout(m_steamSection);
+       steamLayout->setContentsMargins(12, 16, 12, 12);
+       steamLayout->setVerticalSpacing(12);
+       steamLayout->setHorizontalSpacing(20);
+       steamLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+       steamLayout->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+       steamLayout->setLabelAlignment(Qt::AlignLeft);
+       
+       steamLayout->addRow(createFormLabel("Posted:"), m_postedLabel);
+       steamLayout->addRow(createFormLabel("Updated:"), m_updatedLabel);
+       steamLayout->addRow(createFormLabel("Views:"), m_viewsLabel);
+       steamLayout->addRow(createFormLabel("Subscriptions:"), m_subscriptionsLabel);
+       steamLayout->addRow(createFormLabel("Favorites:"), m_favoritesLabel);
+       
+       l->addWidget(m_steamSection);
        
        // Description section with proper sizing
        auto* descSection = new QGroupBox("Description");
@@ -448,8 +480,16 @@ void PropertiesPanel::setupSettingsUI(QWidget* settingsTab)
     m_noAutoMuteCheckBox->setMinimumHeight(28);
     audioLayout->addRow("", m_noAutoMuteCheckBox);
     
+    // Audio processing - not supported by WNEL, will be hidden for external wallpapers
     m_noAudioProcessingCheckBox->setMinimumHeight(28);
-    audioLayout->addRow("", m_noAudioProcessingCheckBox);
+    m_noAudioProcessingWidget = new QWidget;
+    auto* noAudioProcessingLayout = new QHBoxLayout(m_noAudioProcessingWidget);
+    noAudioProcessingLayout->setContentsMargins(0, 0, 0, 0);
+    noAudioProcessingLayout->addWidget(m_noAudioProcessingCheckBox);
+    audioLayout->addRow("", m_noAudioProcessingWidget);
+    
+    // Store reference for hiding later
+    m_noAudioProcessingWidget->setObjectName("noAudioProcessingWidget");
     
     scrollLayout->addWidget(audioGroup);
     
@@ -492,10 +532,17 @@ void PropertiesPanel::setupSettingsUI(QWidget* settingsTab)
         return label;
     };
     
+    // Window Geometry - not supported by WNEL, will be hidden for external wallpapers
     m_windowGeometryEdit->setPlaceholderText("e.g., 1920x1080+0+0");
     m_windowGeometryEdit->setMinimumWidth(200);
     m_windowGeometryEdit->setMinimumHeight(28);
-    displayLayout->addRow(createDisplayLabel("Window Geometry:"), m_windowGeometryEdit);
+    m_windowGeometryWidget = new QWidget;
+    auto* windowGeometryLayout = new QHBoxLayout(m_windowGeometryWidget);
+    windowGeometryLayout->setContentsMargins(0, 0, 0, 0);
+    windowGeometryLayout->addWidget(m_windowGeometryEdit);
+    m_windowGeometryLabel = createDisplayLabel("Window Geometry:");
+    displayLayout->addRow(m_windowGeometryLabel, m_windowGeometryWidget);
+    m_windowGeometryWidget->setObjectName("windowGeometryWidget");
     
     // Screen root with proper sizing
     m_screenRootCombo->setMinimumWidth(200);
@@ -504,22 +551,35 @@ void PropertiesPanel::setupSettingsUI(QWidget* settingsTab)
     m_screenRootCombo->addItems(screens);
     displayLayout->addRow(createDisplayLabel("Screen Root:"), m_screenRootCombo);
     
+    // Background ID - not supported by WNEL, will be hidden for external wallpapers
     m_backgroundIdEdit->setPlaceholderText("Background ID");
     m_backgroundIdEdit->setMinimumWidth(200);
     m_backgroundIdEdit->setMinimumHeight(28);
-    displayLayout->addRow(createDisplayLabel("Background ID:"), m_backgroundIdEdit);
+    m_backgroundIdWidget = new QWidget;
+    auto* backgroundIdLayout = new QHBoxLayout(m_backgroundIdWidget);
+    backgroundIdLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundIdLayout->addWidget(m_backgroundIdEdit);
+    m_backgroundIdLabel = createDisplayLabel("Background ID:");
+    displayLayout->addRow(m_backgroundIdLabel, m_backgroundIdWidget);
+    m_backgroundIdWidget->setObjectName("backgroundIdWidget");
     
     // Scaling combo
-    m_scalingCombo->addItems({"default", "stretch", "fit", "fill", "center"});
+    m_scalingCombo->addItems({"default", "stretch", "fit", "fill"});
     m_scalingCombo->setMinimumWidth(150);
     m_scalingCombo->setMinimumHeight(28);
     displayLayout->addRow(createDisplayLabel("Scaling:"), m_scalingCombo);
     
-    // Clamping combo
+    // Clamping combo - not supported by WNEL, will be hidden for external wallpapers
     m_clampingCombo->addItems({"clamp", "border", "repeat"});
     m_clampingCombo->setMinimumWidth(150);
     m_clampingCombo->setMinimumHeight(28);
-    displayLayout->addRow(createDisplayLabel("Clamping:"), m_clampingCombo);
+    m_clampingWidget = new QWidget;
+    auto* clampingLayout = new QHBoxLayout(m_clampingWidget);
+    clampingLayout->setContentsMargins(0, 0, 0, 0);
+    clampingLayout->addWidget(m_clampingCombo);
+    m_clampingLabel = createDisplayLabel("Clamping:");
+    displayLayout->addRow(m_clampingLabel, m_clampingWidget);
+    m_clampingWidget->setObjectName("clampingWidget");
     
     scrollLayout->addWidget(displayGroup);
     
@@ -539,6 +599,72 @@ void PropertiesPanel::setupSettingsUI(QWidget* settingsTab)
     behaviorLayout->addWidget(m_noFullscreenPauseCheckBox);
     
     scrollLayout->addWidget(behaviorGroup);
+    
+    // WNEL-Specific Settings Group (only visible for external wallpapers)
+    auto* wnelGroup = new QGroupBox("WNEL-Specific Settings");
+    auto* wnelLayout = new QFormLayout(wnelGroup);
+    wnelLayout->setContentsMargins(12, 16, 12, 12);
+    wnelLayout->setVerticalSpacing(16);
+    wnelLayout->setHorizontalSpacing(24);
+    wnelLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    
+    // Video settings
+    m_noLoopCheckBox->setMinimumHeight(28);
+    wnelLayout->addRow("", m_noLoopCheckBox);
+    
+    m_noHardwareDecodeCheckBox->setMinimumHeight(28);
+    wnelLayout->addRow("", m_noHardwareDecodeCheckBox);
+    
+    // Backend settings - make them mutually exclusive
+    m_forceX11CheckBox->setMinimumHeight(28);
+    m_forceWaylandCheckBox->setMinimumHeight(28);
+    wnelLayout->addRow("", m_forceX11CheckBox);
+    wnelLayout->addRow("", m_forceWaylandCheckBox);
+    
+    // Make X11 and Wayland checkboxes mutually exclusive
+    connect(m_forceX11CheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        if (checked) m_forceWaylandCheckBox->setChecked(false);
+        onSettingChanged();
+    });
+    connect(m_forceWaylandCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        if (checked) m_forceX11CheckBox->setChecked(false);
+        onSettingChanged();
+    });
+    
+    // Debug settings
+    m_verboseCheckBox->setMinimumHeight(28);
+    wnelLayout->addRow("", m_verboseCheckBox);
+    
+    // Log level
+    m_logLevelCombo->addItems({"debug", "info", "warn", "error"});
+    m_logLevelCombo->setCurrentText("info");
+    m_logLevelCombo->setMinimumHeight(28);
+    auto* logLevelLabel = new QLabel("Log Level:");
+    logLevelLabel->setMinimumWidth(80);
+    logLevelLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    logLevelLabel->setStyleSheet("font-weight: bold;");
+    wnelLayout->addRow(logLevelLabel, m_logLevelCombo);
+    
+    // MPV options
+    m_mpvOptionsEdit->setPlaceholderText("Additional MPV options (advanced)");
+    m_mpvOptionsEdit->setMinimumHeight(28);
+    auto* mpvLabel = new QLabel("MPV Options:");
+    mpvLabel->setMinimumWidth(80);
+    mpvLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    mpvLabel->setStyleSheet("font-weight: bold;");
+    wnelLayout->addRow(mpvLabel, m_mpvOptionsEdit);
+    
+    scrollLayout->addWidget(wnelGroup);
+    
+    // Connect WNEL-specific signals
+    connect(m_noLoopCheckBox, &QCheckBox::toggled, this, &PropertiesPanel::onSettingChanged);
+    connect(m_noHardwareDecodeCheckBox, &QCheckBox::toggled, this, &PropertiesPanel::onSettingChanged);
+    connect(m_verboseCheckBox, &QCheckBox::toggled, this, &PropertiesPanel::onSettingChanged);
+    connect(m_logLevelCombo, &QComboBox::currentTextChanged, this, &PropertiesPanel::onSettingChanged);
+    connect(m_mpvOptionsEdit, &QLineEdit::textChanged, this, &PropertiesPanel::onSettingChanged);
+    
+    // Store reference to WNEL group for visibility control
+    wnelGroup->setObjectName("wnelGroup");
     
     // Add stretch to push everything to the top
     scrollLayout->addStretch();
@@ -572,32 +698,67 @@ void PropertiesPanel::setWallpaper(const WallpaperInfo& wallpaper)
     }
     
     m_currentWallpaper = wallpaper;
-    // Update ID label
-    m_previewIdLabel->setText(wallpaper.id.isEmpty() ? "-" : wallpaper.id);
+    bool isExternalWallpaper = (wallpaper.type == "External");
+    
+    // Update tab visibility based on wallpaper type
+    if (isExternalWallpaper) {
+        // For external wallpapers, show only Info and External Settings tabs
+        m_innerTabWidget->setTabText(1, "External Settings");
+        m_innerTabWidget->setTabEnabled(1, true);
+        m_innerTabWidget->setTabEnabled(2, true); // Engine Settings for WNEL
+        m_innerTabWidget->setTabEnabled(3, true); // Engine Log
+    } else {
+        // For regular wallpapers, show all tabs normally
+        m_innerTabWidget->setTabText(1, "Wallpaper Settings");
+        m_innerTabWidget->setTabEnabled(1, true);
+        m_innerTabWidget->setTabEnabled(2, true);
+        m_innerTabWidget->setTabEnabled(3, true);
+    }
+    
+    // Update WNEL-specific settings visibility
+    updateWNELSettingsVisibility(isExternalWallpaper);
+    
+    // Update UI visibility based on wallpaper type
+    updateUIVisibilityForWallpaperType(isExternalWallpaper);
+    
+    if (isExternalWallpaper) {
+        // For external wallpapers, show the file path instead of ID
+        QString filePath = getExternalWallpaperFilePath(wallpaper.id);
+        m_previewIdLabel->setText(filePath.isEmpty() ? "Unknown file path" : filePath);
+        
+        // Set author to "Local" for external wallpapers
+        m_authorLabel->setText("Local");
+    } else {
+        // Update ID label for regular wallpapers
+        m_previewIdLabel->setText(wallpaper.id.isEmpty() ? "-" : wallpaper.id);
+        m_authorLabel->setText(wallpaper.author.isEmpty() ? "Unknown" : wallpaper.author);
+    }
 
     // Update basic info
     m_nameLabel->setText(wallpaper.name.isEmpty() ? "Unknown" : wallpaper.name);
-    m_authorLabel->setText(wallpaper.author.isEmpty() ? "Unknown" : wallpaper.author);
     m_typeLabel->setText(wallpaper.type.isEmpty() ? "Unknown" : wallpaper.type);
     m_fileSizeLabel->setText(formatFileSize(wallpaper.fileSize));
     
-    // Update dates
-    if (wallpaper.created.isValid()) {
-        m_postedLabel->setText(wallpaper.created.toString("yyyy-MM-dd"));
-    } else {
-        m_postedLabel->setText("Unknown");
+    if (!isExternalWallpaper) {
+        // Steam-specific data only for regular wallpapers
+        // Update dates
+        if (wallpaper.created.isValid()) {
+            m_postedLabel->setText(wallpaper.created.toString("yyyy-MM-dd"));
+        } else {
+            m_postedLabel->setText("Unknown");
+        }
+        
+        if (wallpaper.updated.isValid()) {
+            m_updatedLabel->setText(wallpaper.updated.toString("yyyy-MM-dd"));
+        } else {
+            m_updatedLabel->setText("Unknown");
+        }
+        
+        // Update stats
+        m_viewsLabel->setText("Unknown");
+        m_subscriptionsLabel->setText("Unknown");
+        m_favoritesLabel->setText("Unknown");
     }
-    
-    if (wallpaper.updated.isValid()) {
-        m_updatedLabel->setText(wallpaper.updated.toString("yyyy-MM-dd"));
-    } else {
-        m_updatedLabel->setText("Unknown");
-    }
-    
-    // Update stats
-    m_viewsLabel->setText("Unknown");
-    m_subscriptionsLabel->setText("Unknown");
-    m_favoritesLabel->setText("Unknown");
     
     // Update description
     if (!wallpaper.description.isEmpty()) {
@@ -733,42 +894,51 @@ void PropertiesPanel::updateProperties(const QJsonObject& properties)
         m_propertiesWidget->deleteLater();
     }
     
+    bool isExternalWallpaper = (m_currentWallpaper.type == "External");
+    
     m_propertiesWidget = new QWidget;
-    auto* layout = new QFormLayout(m_propertiesWidget);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setVerticalSpacing(12);
-    layout->setHorizontalSpacing(16);
-    layout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    layout->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
-    layout->setLabelAlignment(Qt::AlignLeft);
     
-    m_propertyWidgets.clear();
-    m_originalValues.clear();
-    m_originalPropertyObjects.clear();
-    
-    if (properties.isEmpty()) {
-        auto* noPropsLabel = new QLabel("No properties available");
-        noPropsLabel->setStyleSheet("color: #666; font-style: italic; padding: 20px;");
-        noPropsLabel->setAlignment(Qt::AlignCenter);
-        layout->addRow(noPropsLabel);
+    if (isExternalWallpaper) {
+        // Create external wallpaper settings UI
+        setupExternalWallpaperUI();
     } else {
-        addPropertiesFromObject(layout, properties, "");
+        // Create regular properties UI
+        auto* layout = new QFormLayout(m_propertiesWidget);
+        layout->setContentsMargins(8, 8, 8, 8);
+        layout->setVerticalSpacing(12);
+        layout->setHorizontalSpacing(16);
+        layout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+        layout->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+        layout->setLabelAlignment(Qt::AlignLeft);
+        
+        m_propertyWidgets.clear();
+        m_originalValues.clear();
+        m_originalPropertyObjects.clear();
+        
+        if (properties.isEmpty()) {
+            auto* noPropsLabel = new QLabel("No properties available");
+            noPropsLabel->setStyleSheet("color: #666; font-style: italic; padding: 20px;");
+            noPropsLabel->setAlignment(Qt::AlignCenter);
+            layout->addRow(noPropsLabel);
+        } else {
+            addPropertiesFromObject(layout, properties, "");
+        }
+        
+        m_propertiesModified = false;
+        m_savePropertiesButton->setEnabled(false);
+        
+        // Update reset button based on backup availability
+        if (!m_currentWallpaper.id.isEmpty()) {
+            QString backupPath = getBackupProjectJsonPath(m_currentWallpaper.id);
+            m_resetPropertiesButton->setEnabled(QFileInfo::exists(backupPath));
+        } else {
+            m_resetPropertiesButton->setEnabled(false);
+        }
     }
     
     // Ensure proper sizing
     m_propertiesWidget->setMinimumSize(m_propertiesWidget->sizeHint());
     m_scrollArea->setWidget(m_propertiesWidget);
-    
-    m_propertiesModified = false;
-    m_savePropertiesButton->setEnabled(false);
-    
-    // Update reset button based on backup availability
-    if (!m_currentWallpaper.id.isEmpty()) {
-        QString backupPath = getBackupProjectJsonPath(m_currentWallpaper.id);
-        m_resetPropertiesButton->setEnabled(QFileInfo::exists(backupPath));
-    } else {
-        m_resetPropertiesButton->setEnabled(false);
-    }
 }
 
 void PropertiesPanel::addPropertiesFromObject(QFormLayout* layout, const QJsonObject& properties, const QString& prefix)
@@ -1011,6 +1181,15 @@ void PropertiesPanel::onSettingChanged()
     m_currentSettings.disableParallax = m_disableParallaxCheckBox->isChecked();
     m_currentSettings.noFullscreenPause = m_noFullscreenPauseCheckBox->isChecked();
     
+    // Update WNEL-specific settings
+    m_currentSettings.noLoop = m_noLoopCheckBox->isChecked();
+    m_currentSettings.noHardwareDecode = m_noHardwareDecodeCheckBox->isChecked();
+    m_currentSettings.forceX11 = m_forceX11CheckBox->isChecked();
+    m_currentSettings.forceWayland = m_forceWaylandCheckBox->isChecked();
+    m_currentSettings.verbose = m_verboseCheckBox->isChecked();
+    m_currentSettings.logLevel = m_logLevelCombo->currentText();
+    m_currentSettings.mpvOptions = m_mpvOptionsEdit->text();
+    
     m_settingsModified = true;
     m_saveSettingsButton->setEnabled(true);
     
@@ -1038,6 +1217,51 @@ void PropertiesPanel::onScreenRootChanged(const QString& screenRoot)
 {
     Q_UNUSED(screenRoot)  // Suppress unused parameter warning
     onSettingChanged();
+}
+
+void PropertiesPanel::onSaveExternalNameClicked()
+{
+    QString newName = m_externalNameEdit->text().trimmed();
+    if (newName.isEmpty()) {
+        QMessageBox::warning(this, "Invalid Name", "Please enter a valid name for the wallpaper.");
+        return;
+    }
+    
+    if (newName == m_currentWallpaper.name) {
+        m_saveExternalNameButton->setEnabled(false);
+        return;
+    }
+    
+    // Update the wallpaper info
+    m_currentWallpaper.name = newName;
+    
+    // Save the updated name to the external wallpaper's project.json file
+    // The ID contains the file path for external wallpapers
+    QString projectJsonPath = QDir(QFileInfo(m_currentWallpaper.id).absoluteDir()).absoluteFilePath("project.json");
+    
+    QJsonObject projectData;
+    projectData["name"] = newName;
+    projectData["description"] = m_currentWallpaper.description;
+    projectData["file"] = QFileInfo(m_currentWallpaper.id).fileName();
+    projectData["type"] = "External";
+    
+    QJsonDocument doc(projectData);
+    QFile file(projectJsonPath);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(doc.toJson());
+        file.close();
+        
+        m_saveExternalNameButton->setEnabled(false);
+        m_nameLabel->setText(newName); // Update the name label in the info section
+        
+        // Emit signal to notify that properties have changed
+        emit propertiesChanged(m_currentWallpaper.id, projectData);
+        
+        qCDebug(propertiesPanel) << "External wallpaper name updated to:" << newName;
+    } else {
+        QMessageBox::warning(this, "Save Error", "Failed to save the wallpaper name. Please check file permissions.");
+        qCWarning(propertiesPanel) << "Failed to save external wallpaper project.json:" << projectJsonPath;
+    }
 }
 
 void PropertiesPanel::restartWallpaperWithChanges()
@@ -1187,6 +1411,15 @@ void PropertiesPanel::updateSettingsControls()
     m_disableParallaxCheckBox->blockSignals(true);
     m_noFullscreenPauseCheckBox->blockSignals(true);
     
+    // Block WNEL-specific signals
+    m_noLoopCheckBox->blockSignals(true);
+    m_noHardwareDecodeCheckBox->blockSignals(true);
+    m_forceX11CheckBox->blockSignals(true);
+    m_forceWaylandCheckBox->blockSignals(true);
+    m_verboseCheckBox->blockSignals(true);
+    m_logLevelCombo->blockSignals(true);
+    m_mpvOptionsEdit->blockSignals(true);
+    
     // Update controls with current settings
     m_silentCheckBox->setChecked(m_currentSettings.silent);
     m_volumeSlider->setValue(m_currentSettings.volume);
@@ -1203,6 +1436,15 @@ void PropertiesPanel::updateSettingsControls()
     m_disableParallaxCheckBox->setChecked(m_currentSettings.disableParallax);
     m_noFullscreenPauseCheckBox->setChecked(m_currentSettings.noFullscreenPause);
     
+    // Update WNEL-specific controls
+    m_noLoopCheckBox->setChecked(m_currentSettings.noLoop);
+    m_noHardwareDecodeCheckBox->setChecked(m_currentSettings.noHardwareDecode);
+    m_forceX11CheckBox->setChecked(m_currentSettings.forceX11);
+    m_forceWaylandCheckBox->setChecked(m_currentSettings.forceWayland);
+    m_verboseCheckBox->setChecked(m_currentSettings.verbose);
+    m_logLevelCombo->setCurrentText(m_currentSettings.logLevel);
+    m_mpvOptionsEdit->setText(m_currentSettings.mpvOptions);
+    
     // Re-enable signals
     m_silentCheckBox->blockSignals(false);
     m_volumeSlider->blockSignals(false);
@@ -1217,6 +1459,15 @@ void PropertiesPanel::updateSettingsControls()
     m_disableMouseCheckBox->blockSignals(false);
     m_disableParallaxCheckBox->blockSignals(false);
     m_noFullscreenPauseCheckBox->blockSignals(false);
+    
+    // Re-enable WNEL-specific signals
+    m_noLoopCheckBox->blockSignals(false);
+    m_noHardwareDecodeCheckBox->blockSignals(false);
+    m_forceX11CheckBox->blockSignals(false);
+    m_forceWaylandCheckBox->blockSignals(false);
+    m_verboseCheckBox->blockSignals(false);
+    m_logLevelCombo->blockSignals(false);
+    m_mpvOptionsEdit->blockSignals(false);
     
     m_settingsModified = false;
     m_saveSettingsButton->setEnabled(false);
@@ -1354,6 +1605,12 @@ bool PropertiesPanel::saveCachedProperties(const QString& wallpaperId, const QJs
 
 void PropertiesPanel::updateSteamApiMetadata(const WallpaperInfo& wallpaper)
 {
+    // Skip Steam API calls for external wallpapers
+    if (wallpaper.type == "External") {
+        qCDebug(propertiesPanel) << "Skipping Steam API metadata for external wallpaper:" << wallpaper.id;
+        return;
+    }
+    
     qCDebug(propertiesPanel) << "Fetching Steam API metadata for wallpaper ID:" << wallpaper.id;
     
     // Connect to the SteamApiManager temporarily for this request
@@ -1626,6 +1883,7 @@ void PropertiesPanel::onUserProfileReceived(const QString& steamId, const SteamU
 }
 
 QString PropertiesPanel::getCacheFilePath(const QString& wallpaperId) const
+
 {
     QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     if (cacheDir.isEmpty()) {
@@ -1800,7 +2058,7 @@ void PropertiesPanel::loadAnimatedPreview(const QString& previewPath)
                 
                 QPixmap scaledFrame = scalePixmapKeepAspectRatio(currentFrame, labelSize);
                 m_previewLabel->setPixmap(scaledFrame);
-            }
+                       }
         }
     });
     
@@ -1850,18 +2108,27 @@ void PropertiesPanel::startPreviewAnimation()
 // Event filter to intercept tab clicks before they change tabs
 bool PropertiesPanel::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_innerTabWidget->tabBar() && 
-        event->type() == QEvent::MouseButtonPress) {
-        
-        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
-        if (mouseEvent->button() == Qt::LeftButton) {
-            // Get the tab index at the click position
-            QTabBar *tabBar = m_innerTabWidget->tabBar();
-            int clickedIndex = tabBar->tabAt(mouseEvent->pos());
+    if (watched == m_innerTabWidget->tabBar()) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            // User is starting to interact with tabs
+            m_userInteractingWithTabs = true;
             
-            if (clickedIndex >= 0) {
-                return handleTabClickWithUnsavedCheck(clickedIndex);
+            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton) {
+                // Get the tab index at the click position
+                QTabBar *tabBar = m_innerTabWidget->tabBar();
+                int clickedIndex = tabBar->tabAt(mouseEvent->pos());
+                
+                if (clickedIndex >= 0) {
+                    return handleTabClickWithUnsavedCheck(clickedIndex);
+                }
             }
+        } else if (event->type() == QEvent::MouseButtonRelease) {
+            // Use a timer to clear the interaction flag after a short delay
+            // This prevents external tab switches during the tab change process
+            QTimer::singleShot(1000, this, [this]() {
+                m_userInteractingWithTabs = false;
+            });
         }
     }
     
@@ -1885,10 +2152,16 @@ bool PropertiesPanel::handleTabClickWithUnsavedCheck(int index)
     
     // Check if we're leaving a tab with unsaved changes
     bool hasUnsaved = false;
-    if (currentIndex == 1) { // Wallpaper Settings tab
-        hasUnsaved = m_propertiesModified;
-    } else if (currentIndex == 2) { // Engine Settings tab
-        hasUnsaved = m_settingsModified;
+    
+    // Skip unsaved changes check for external wallpapers to avoid tab switching issues
+    bool isExternalWallpaper = (m_currentWallpaper.type == "External");
+    
+    if (!isExternalWallpaper) {
+        if (currentIndex == 1) { // Wallpaper Settings tab
+            hasUnsaved = m_propertiesModified;
+        } else if (currentIndex == 2) { // Engine Settings tab
+            hasUnsaved = m_settingsModified;
+        }
     }
     
     if (hasUnsaved) {
@@ -1968,7 +2241,292 @@ void PropertiesPanel::copyWallpaperIdToClipboard()
     if (m_currentWallpaper.id.isEmpty()) {
         return;
     }
+    
     QClipboard* clipboard = QApplication::clipboard();
-    clipboard->setText(m_currentWallpaper.id);
-    QMessageBox::information(this, "Copy Wallpaper ID", "Wallpaper ID copied to clipboard.");
+    QString textToCopy;
+    QString messageTitle;
+    QString messageText;
+    
+    if (m_currentWallpaper.type == "External") {
+        // For external wallpapers, copy the file path
+        textToCopy = getExternalWallpaperFilePath(m_currentWallpaper.id);
+        if (textToCopy.isEmpty()) {
+            textToCopy = m_currentWallpaper.id; // Fallback to ID
+            messageTitle = "Copy File Path";
+            messageText = "Could not find file path, wallpaper ID copied instead.";
+        } else {
+            messageTitle = "Copy File Path";
+            messageText = "File path copied to clipboard.";
+        }
+    } else {
+        // For regular wallpapers, copy the ID
+        textToCopy = m_currentWallpaper.id;
+        messageTitle = "Copy Wallpaper ID";
+        messageText = "Wallpaper ID copied to clipboard.";
+    }
+    
+    clipboard->setText(textToCopy);
+    QMessageBox::information(this, messageTitle, messageText);
+}
+
+void PropertiesPanel::setupExternalWallpaperUI()
+{
+    auto* layout = new QVBoxLayout(m_propertiesWidget);
+    layout->setContentsMargins(12, 12, 12, 12);
+    layout->setSpacing(16);
+    
+    // External wallpaper information section
+    auto* infoGroup = new QGroupBox("External Wallpaper Settings");
+    auto* infoLayout = new QFormLayout(infoGroup);
+    infoLayout->setContentsMargins(12, 16, 12, 12);
+    infoLayout->setVerticalSpacing(12);
+    infoLayout->setHorizontalSpacing(16);
+    infoLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    
+    // Wallpaper name editor
+    auto* nameLabel = new QLabel("Name:");
+    nameLabel->setStyleSheet("font-weight: bold;");
+    m_externalNameEdit->setMinimumHeight(28);
+    m_externalNameEdit->setText(m_currentWallpaper.name);
+    m_externalNameEdit->setPlaceholderText("Enter wallpaper name...");
+    
+    auto* nameLayout = new QHBoxLayout;
+    nameLayout->addWidget(m_externalNameEdit);
+    nameLayout->addWidget(m_saveExternalNameButton);
+    
+    infoLayout->addRow(nameLabel, nameLayout);
+    
+    // File path display
+    auto* pathLabel = new QLabel("File Path:");
+    pathLabel->setStyleSheet("font-weight: bold;");
+    
+    // For external wallpapers, show the symlink path that points to the actual file
+    QString displayPath = m_currentWallpaper.path;
+    if (displayPath.isEmpty()) {
+        displayPath = m_currentWallpaper.id;
+    }
+    
+    auto* pathDisplayLabel = new QLabel(displayPath);
+    pathDisplayLabel->setWordWrap(true);
+    pathDisplayLabel->setStyleSheet("color: #666; font-style: italic;");
+    pathDisplayLabel->setMinimumHeight(28);
+    infoLayout->addRow(pathLabel, pathDisplayLabel);
+    
+    // File type display
+    auto* typeLabel = new QLabel("File Type:");
+    typeLabel->setStyleSheet("font-weight: bold;");
+    QString fileType = "Unknown";
+    
+    // Use the actual file path for external wallpapers, not the ID
+    QString filePath = m_currentWallpaper.path;
+    if (filePath.isEmpty()) {
+        filePath = m_currentWallpaper.id;
+    }
+    
+    if (filePath.endsWith(".mp4") || filePath.endsWith(".avi") || filePath.endsWith(".mkv") || filePath.endsWith(".mov")) {
+        fileType = "Video";
+    } else if (filePath.endsWith(".gif")) {
+        fileType = "Animated GIF";
+    } else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg") || filePath.endsWith(".png") || filePath.endsWith(".bmp")) {
+        fileType = "Image";
+    }
+    auto* typeDisplayLabel = new QLabel(fileType);
+    typeDisplayLabel->setMinimumHeight(28);
+    infoLayout->addRow(typeLabel, typeDisplayLabel);
+    
+    layout->addWidget(infoGroup);
+    
+    // Usage instructions section
+    auto* usageGroup = new QGroupBox("Usage Information");
+    auto* usageLayout = new QVBoxLayout(usageGroup);
+    usageLayout->setContentsMargins(12, 16, 12, 12);
+    
+    auto* instructionsLabel = new QLabel(
+        "<p><b>External wallpapers</b> are custom media files (images, GIFs, or videos) "
+        "that are launched using the wallpaper_not-engine_linux (WNEL) addon.</p>"
+        "<p><b>Features available:</b></p>"
+        "<ul>"
+        "<li>Support for images (JPG, PNG, BMP)</li>"
+        "<li>Animated GIFs with proper frame timing</li>"
+        "<li>Video files (MP4, AVI, MKV, MOV)</li>"
+        "<li>Customizable engine settings on the Engine Settings tab</li>"
+        "</ul>"
+        "<p><b>Note:</b> Engine-specific settings like volume, scaling, and performance "
+        "options can be configured in the <i>Engine Settings</i> tab.</p>"
+    );
+    instructionsLabel->setWordWrap(true);
+    instructionsLabel->setStyleSheet("background: #f0f0f0; padding: 12px; border: 1px solid #ccc; border-radius: 4px;");
+    
+    usageLayout->addWidget(instructionsLabel);
+    layout->addWidget(usageGroup);
+    
+    layout->addStretch();
+    
+    // Connect signals for external wallpaper settings
+    connect(m_saveExternalNameButton, &QPushButton::clicked, this, &PropertiesPanel::onSaveExternalNameClicked);
+    connect(m_externalNameEdit, &QLineEdit::textChanged, this, [this]() {
+        m_saveExternalNameButton->setEnabled(m_externalNameEdit->text() != m_currentWallpaper.name);
+    });
+    
+    // Initially disable save button if name hasn't changed
+    m_saveExternalNameButton->setEnabled(false);
+}
+
+void PropertiesPanel::updateWNELSettingsVisibility(bool isExternalWallpaper)
+{
+    // Find the WNEL group widget in the engine settings tab
+    QWidget* engineTab = engineSettingsTab();
+    if (!engineTab) return;
+    
+    QGroupBox* wnelGroup = engineTab->findChild<QGroupBox*>("wnelGroup");
+    if (wnelGroup) {
+        wnelGroup->setVisible(isExternalWallpaper);
+    }
+    
+    // Also hide certain regular wallpaper settings when external wallpaper is selected
+    // These settings don't apply to WNEL
+    if (isExternalWallpaper) {
+        // Hide settings that don't apply to WNEL
+        m_disableMouseCheckBox->setVisible(false);
+        m_disableParallaxCheckBox->setVisible(false);
+        m_noFullscreenPauseCheckBox->setVisible(false);
+        m_windowGeometryEdit->setVisible(false);
+        m_backgroundIdEdit->setVisible(false);
+        m_clampingCombo->setVisible(false);
+        
+        // Find and hide their labels too
+        QWidget* parent = m_disableMouseCheckBox->parentWidget();
+        if (parent) {
+            QFormLayout* layout = qobject_cast<QFormLayout*>(parent->layout());
+            if (layout) {
+                // Hide the entire behavior group for external wallpapers
+                QGroupBox* behaviorGroup = parent->parentWidget() ? 
+                    qobject_cast<QGroupBox*>(parent->parentWidget()) : nullptr;
+                if (behaviorGroup && behaviorGroup->title() == "Behavior Settings") {
+                    behaviorGroup->setVisible(false);
+                }
+            }
+        }
+    } else {
+        // Show regular wallpaper settings
+        m_disableMouseCheckBox->setVisible(true);
+        m_disableParallaxCheckBox->setVisible(true);
+        m_noFullscreenPauseCheckBox->setVisible(true);
+        m_windowGeometryEdit->setVisible(true);
+        m_backgroundIdEdit->setVisible(true);
+        m_clampingCombo->setVisible(true);
+        
+        // Show behavior group
+        QWidget* parent = m_disableMouseCheckBox->parentWidget();
+        if (parent) {
+            QGroupBox* behaviorGroup = parent->parentWidget() ? 
+                qobject_cast<QGroupBox*>(parent->parentWidget()) : nullptr;
+            if (behaviorGroup && behaviorGroup->title() == "Behavior Settings") {
+                behaviorGroup->setVisible(true);
+            }
+        }
+    }
+}
+
+void PropertiesPanel::updateUIVisibilityForWallpaperType(bool isExternal)
+{
+    qCDebug(propertiesPanel) << "updateUIVisibilityForWallpaperType called with isExternal:" << isExternal;
+    
+    // Update ID section - show file path for external, ID for regular
+    if (m_idSection) {
+        // Change the label text for external wallpapers
+        QLabel* idTitleLabel = m_idSection->findChild<QLabel*>();
+        if (idTitleLabel && idTitleLabel->text() == "ID:") {
+            idTitleLabel->setText(isExternal ? "File:" : "ID:");
+        }
+        
+        // For external wallpapers, make the copy button copy the file path
+        if (m_copyIdButton) {
+            m_copyIdButton->setToolTip(isExternal ? "Copy file path" : "Copy wallpaper ID");
+        }
+    }
+    
+    // Show/hide Steam-specific metadata
+    if (m_steamSection) {
+        m_steamSection->setVisible(!isExternal);
+        qCDebug(propertiesPanel) << "Steam section visibility set to:" << !isExternal;
+    }
+    
+    // Hide unsupported engine settings for external wallpapers
+    QWidget* engineTab = engineSettingsTab();
+    if (engineTab) {
+        qCDebug(propertiesPanel) << "Found engine tab, looking for widgets to hide";
+        
+        // Hide audio processing (not supported by WNEL)
+        if (m_noAudioProcessingWidget) {
+            m_noAudioProcessingWidget->setVisible(!isExternal);
+            qCDebug(propertiesPanel) << "Audio processing widget visibility set to:" << !isExternal;
+        } else {
+            qCDebug(propertiesPanel) << "Audio processing widget not found";
+        }
+        
+        // Hide window geometry (not supported by WNEL)
+        if (m_windowGeometryWidget && m_windowGeometryLabel) {
+            m_windowGeometryWidget->setVisible(!isExternal);
+            m_windowGeometryLabel->setVisible(!isExternal);
+            qCDebug(propertiesPanel) << "Window geometry widget and label visibility set to:" << !isExternal;
+        } else {
+            qCDebug(propertiesPanel) << "Window geometry widget or label not found";
+        }
+        
+        // Hide background ID (not supported by WNEL)
+        if (m_backgroundIdWidget && m_backgroundIdLabel) {
+            m_backgroundIdWidget->setVisible(!isExternal);
+            m_backgroundIdLabel->setVisible(!isExternal);
+            qCDebug(propertiesPanel) << "Background ID widget and label visibility set to:" << !isExternal;
+        } else {
+            qCDebug(propertiesPanel) << "Background ID widget or label not found";
+        }
+        
+        // Hide clamping (not supported by WNEL)
+        if (m_clampingWidget && m_clampingLabel) {
+            m_clampingWidget->setVisible(!isExternal);
+            m_clampingLabel->setVisible(!isExternal);
+            qCDebug(propertiesPanel) << "Clamping widget and label visibility set to:" << !isExternal;
+        } else {
+            qCDebug(propertiesPanel) << "Clamping widget or label not found";
+        }
+        
+        // Hide behavior settings group (not applicable to WNEL)
+        QList<QGroupBox*> groups = engineTab->findChildren<QGroupBox*>();
+        for (QGroupBox* group : groups) {
+            if (group->title() == "Behavior Settings") {
+                group->setVisible(!isExternal);
+                qCDebug(propertiesPanel) << "Behavior Settings group visibility set to:" << !isExternal;
+                break;
+            }
+        }
+    } else {
+        qCDebug(propertiesPanel) << "Engine tab not found";
+    }
+}
+
+QString PropertiesPanel::getExternalWallpaperFilePath(const QString& wallpaperId)
+{
+    // Read the project.json file for the external wallpaper to get the file path
+    QString configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+    QString externalDir = configDir + "/wallpaperengine-gui/external_wallpapers/" + wallpaperId;
+    QString projectFile = externalDir + "/project.json";
+    
+    QFile file(projectFile);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return QString();
+    }
+    
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+    if (error.error != QJsonParseError::NoError) {
+        return QString();
+    }
+    
+    QJsonObject project = doc.object();
+    QString filePath = project.value("file").toString();
+    
+    // Return the original file path if available
+    return filePath;
 }

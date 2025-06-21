@@ -25,6 +25,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/steam)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/ui)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/widgets)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/playlist)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/addons)
 
 # Source files
 set(SOURCES
@@ -50,6 +51,9 @@ set(SOURCES
     
     # Playlist functionality
     src/playlist/WallpaperPlaylist.cpp
+    
+    # Addons
+    src/addons/WNELAddon.cpp
 )
 
 # Header files
@@ -73,6 +77,9 @@ set(HEADERS
     
     # Playlist functionality
     src/playlist/WallpaperPlaylist.h
+    
+    # Addons
+    src/addons/WNELAddon.h
 )
 
 # Resource files

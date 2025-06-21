@@ -1,4 +1,5 @@
 #include "PlaylistPreview.h"
+#include "../addons/WNELAddon.h"  // Add WNELAddon include
 #include <QApplication>
 #include <QStyle>
 #include <QPixmap>
@@ -18,6 +19,7 @@ PlaylistPreview::PlaylistPreview(WallpaperPlaylist* playlist, WallpaperManager* 
     : QWidget(parent)
     , m_playlist(playlist)
     , m_wallpaperManager(wallpaperManager)
+    , m_wnelAddon(nullptr)
     , m_selectedItem(nullptr)
     , m_currentItemsPerRow(PREFERRED_ITEMS_PER_ROW)
     , m_lastContainerWidth(0)
@@ -207,7 +209,7 @@ void PlaylistPreview::updatePlaylistItems()
 
 PlaylistPreviewItem* PlaylistPreview::createPlaylistPreviewItem(const PlaylistItem& item, int index)
 {
-    PlaylistPreviewItem* widget = new PlaylistPreviewItem(item, index, m_wallpaperManager, this);
+    PlaylistPreviewItem* widget = new PlaylistPreviewItem(item, index, this);
     
     // Set current state
     if (m_playlist && m_playlist->getCurrentWallpaperId() == item.wallpaperId) {
@@ -582,21 +584,21 @@ void PlaylistPreview::clearCurrentItems()
 }
 
 // PlaylistPreviewItem implementation (replaces PlaylistItemWidget)
-PlaylistPreviewItem::PlaylistPreviewItem(const PlaylistItem& item, int index, WallpaperManager* wallpaperManager, QWidget* parent)
+PlaylistPreviewItem::PlaylistPreviewItem(const PlaylistItem& item, int index, PlaylistPreview* parent)
     : QWidget(parent)
     , m_item(item)
     , m_index(index)
     , m_isCurrent(false)
     , m_selected(false)
-    , m_wallpaperManager(wallpaperManager)
+    , m_playlistPreview(parent)
     , m_previewMovie(nullptr)
     , m_useCustomPainting(true)
 {
     setFixedSize(ITEM_WIDTH, ITEM_HEIGHT + 20);
     
-    // Load wallpaper info first
-    if (m_wallpaperManager) {
-        auto wallpaperInfoOpt = m_wallpaperManager->getWallpaperInfo(m_item.wallpaperId);
+    // Load wallpaper info using parent's method that checks both regular and external wallpapers
+    if (m_playlistPreview) {
+        auto wallpaperInfoOpt = m_playlistPreview->getWallpaperInfo(m_item.wallpaperId);
         if (wallpaperInfoOpt.has_value()) {
             m_wallpaperInfo = wallpaperInfoOpt.value();
             qCDebug(playlistPreview) << "PlaylistPreviewItem: Found wallpaper info for ID:" << m_item.wallpaperId << "Name:" << m_wallpaperInfo.name << "Preview:" << m_wallpaperInfo.previewPath;
@@ -610,13 +612,13 @@ PlaylistPreviewItem::PlaylistPreviewItem(const PlaylistItem& item, int index, Wa
             qCDebug(playlistPreview) << "PlaylistPreviewItem: No wallpaper info found for ID:" << m_item.wallpaperId << "Using fallback";
         }
     } else {
-        // No wallpaper manager - create minimal info
+        // No playlist preview parent - create minimal info
         m_wallpaperInfo.id = m_item.wallpaperId;
         m_wallpaperInfo.name = QString("Wallpaper %1").arg(m_item.wallpaperId);
         m_wallpaperInfo.author = "Unknown";
         m_wallpaperInfo.type = "Unknown";
         m_wallpaperInfo.previewPath = "";
-        qCDebug(playlistPreview) << "PlaylistPreviewItem: No wallpaper manager available for ID:" << m_item.wallpaperId;
+        qCDebug(playlistPreview) << "PlaylistPreviewItem: No PlaylistPreview parent available for ID:" << m_item.wallpaperId;
     }
     
     setupUI();
@@ -1100,4 +1102,34 @@ void PlaylistPreviewItem::onMoveUpClicked()
 void PlaylistPreviewItem::onMoveDownClicked()
 {
     emit moveDownRequested(m_index);
+}
+
+void PlaylistPreview::setWNELAddon(WNELAddon* addon)
+{
+    m_wnelAddon = addon;
+    // Refresh playlist to get proper external wallpaper info
+    refreshPlaylist();
+}
+
+std::optional<WallpaperInfo> PlaylistPreview::getWallpaperInfo(const QString& wallpaperId) const
+{
+    // First try to get from regular wallpapers
+    if (m_wallpaperManager) {
+        auto wallpaperInfo = m_wallpaperManager->getWallpaperInfo(wallpaperId);
+        if (wallpaperInfo.has_value()) {
+            return wallpaperInfo;
+        }
+    }
+    
+    // If not found in regular wallpapers, try external wallpapers
+    if (m_wnelAddon) {
+        QList<ExternalWallpaperInfo> externalWallpapers = m_wnelAddon->getAllExternalWallpapers();
+        for (const ExternalWallpaperInfo& external : externalWallpapers) {
+            if (external.id == wallpaperId) {
+                return external.toWallpaperInfo();
+            }
+        }
+    }
+    
+    return std::nullopt;
 }

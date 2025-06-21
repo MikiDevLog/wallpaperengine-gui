@@ -29,6 +29,8 @@
 #include "../playlist/WallpaperPlaylist.h"
 #include "../core/WallpaperManager.h"
 
+// Forward declaration to avoid circular dependency
+class WNELAddon;
 class PlaylistPreviewItem;
 
 class PlaylistPreview : public QWidget
@@ -40,6 +42,10 @@ public:
 
     void refreshPlaylist();
     void updateCurrentWallpaper(const QString& wallpaperId);
+    void setWNELAddon(WNELAddon* addon);
+    
+    // Helper method to get wallpaper info from both regular and external sources
+    std::optional<WallpaperInfo> getWallpaperInfo(const QString& wallpaperId) const;
 
     // Layout constants similar to WallpaperPreview
     static constexpr int ITEM_SPACING = 16;
@@ -98,6 +104,7 @@ private:
 
     WallpaperPlaylist* m_playlist;
     WallpaperManager* m_wallpaperManager;
+    WNELAddon* m_wnelAddon;
 
     // UI Components
     QVBoxLayout* m_mainLayout;
@@ -140,7 +147,7 @@ class PlaylistPreviewItem : public QWidget
     Q_OBJECT
 
 public:
-    explicit PlaylistPreviewItem(const PlaylistItem& item, int index, WallpaperManager* wallpaperManager, QWidget* parent = nullptr);
+    explicit PlaylistPreviewItem(const PlaylistItem& item, int index, PlaylistPreview* parent = nullptr);
     
     const PlaylistItem& playlistItem() const { return m_item; }
     int getIndex() const { return m_index; }
@@ -199,7 +206,7 @@ private:
     int m_index;
     bool m_isCurrent;
     bool m_selected;
-    WallpaperManager* m_wallpaperManager;
+    PlaylistPreview* m_playlistPreview;
     WallpaperInfo m_wallpaperInfo;
     
     // Preview display

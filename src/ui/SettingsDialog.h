@@ -42,12 +42,20 @@ private slots:
     void onApiKeyTestSucceeded();
     void onApiKeyTestFailed(const QString& error);
     void copyApiKeyUrlToClipboard(const QString& url);
+    
+    // Extra tab slots
+    void onWNELEnabledChanged(bool enabled);
+    void copyWNELUrlToClipboard();
+    void browseExternalWallpapersPath();
+    void browseWNELBinaryPath();
+    void testWNELBinary();
 
 private:
     void setupUI();
     QWidget* createPathsTab();
     QWidget* createApiTab();       // Method for Steam API tab
     QWidget* createThemeTab();     // Method for Theme tab
+    QWidget* createExtraTab();     // Method for Extra tab
     void loadSettings();
     void saveSettings();
     void updateSteamStatus();
@@ -75,6 +83,16 @@ private:
     // Theme tab components
     QComboBox* m_themeComboBox;
     QLabel* m_themePreviewLabel;
+    
+    // Extra tab components
+    QCheckBox* m_enableWNELCheckbox;
+    QLabel* m_wnelDescriptionLabel;
+    QPushButton* m_copyWNELUrlButton;
+    QLineEdit* m_externalWallpapersPathEdit;
+    QPushButton* m_browseExternalPathButton;
+    QLineEdit* m_wnelBinaryPathEdit;
+    QPushButton* m_browseWNELBinaryButton;
+    QPushButton* m_testWNELBinaryButton;
     
     // Configuration
     ConfigManager& m_config;

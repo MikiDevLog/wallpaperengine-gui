@@ -146,6 +146,7 @@ public:
     explicit WallpaperPreview(QWidget* parent = nullptr);
     
     void setWallpaperManager(WallpaperManager* manager);
+    void setWNELAddon(class WNELAddon* wnelAddon);  // Add WNEL addon setter
     void refreshWallpapers();
     void selectWallpaper(const QString& wallpaperId);
     void updateTheme();
@@ -216,6 +217,7 @@ private:
     QStringList scanWorkshopDirectory();
 
     WallpaperManager* m_wallpaperManager;
+    class WNELAddon* m_wnelAddon;  // Add WNEL addon pointer
     
     // UI components
     QLineEdit* m_searchEdit;

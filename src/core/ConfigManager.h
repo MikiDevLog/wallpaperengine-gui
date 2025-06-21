@@ -140,6 +140,14 @@ public:
     void setUseSteamApi(bool use);
     QDateTime lastApiUpdate() const;
     void setLastApiUpdate(const QDateTime& dateTime);
+    
+    // WNEL Addon settings
+    bool isWNELAddonEnabled() const;
+    void setWNELAddonEnabled(bool enabled);
+    QString externalWallpapersPath() const;
+    void setExternalWallpapersPath(const QString& path);
+    QString wnelBinaryPath() const;
+    void setWNELBinaryPath(const QString& path);
 
 private:
     explicit ConfigManager(QObject* parent = nullptr);

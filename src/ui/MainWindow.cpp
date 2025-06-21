@@ -7,6 +7,7 @@
 #include "../core/ConfigManager.h"
 #include "../core/WallpaperManager.h"
 #include "../steam/SteamDetector.h"
+#include "../addons/WNELAddon.h"  // Add WNEL addon include
 #include <QApplication>
 #include <QSplitter>
 #include <QVBoxLayout>
@@ -27,6 +28,7 @@
 #include <QTabWidget>
 #include <QDateTime>
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QLoggingCategory>
 #include <QSystemTrayIcon>
 #include <QMouseEvent>
@@ -192,6 +194,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_playlistPreview(nullptr)
     , m_addToPlaylistButton(nullptr)
     , m_removeFromPlaylistButton(nullptr)
+    , m_addCustomWallpaperButton(nullptr)
     , m_refreshAction(nullptr)
     , m_settingsAction(nullptr)
     , m_aboutAction(nullptr)
@@ -202,6 +205,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_config(ConfigManager::instance())
     , m_wallpaperManager(new WallpaperManager(this))
     , m_wallpaperPlaylist(new WallpaperPlaylist(this))
+    , m_wnelAddon(new WNELAddon(this))
     , m_refreshing(false)
     , m_isClosing(false)
     , m_startMinimized(false)
@@ -274,6 +278,19 @@ void MainWindow::setupUI()
             this, [this](const QString& error) {
                 QMessageBox::warning(this, "Error", error);
                 m_statusLabel->setText("Error: " + error);
+            });
+    
+    // Connect WNEL addon signals
+    connect(m_wnelAddon, &WNELAddon::externalWallpaperAdded,
+            this, &MainWindow::onExternalWallpaperAdded);
+    connect(m_wnelAddon, &WNELAddon::externalWallpaperRemoved,
+            this, &MainWindow::onExternalWallpaperRemoved);
+    connect(m_wnelAddon, &WNELAddon::outputReceived,
+            this, &MainWindow::onOutputReceived);
+    connect(m_wnelAddon, &WNELAddon::errorOccurred,
+            this, [this](const QString& error) {
+                QMessageBox::warning(this, "WNEL Error", error);
+                m_statusLabel->setText("WNEL Error: " + error);
             });
 }
 
@@ -385,9 +402,12 @@ void MainWindow::createCentralWidget()
     m_addToPlaylistButton->setEnabled(false);
     m_removeFromPlaylistButton = new QPushButton("Remove from Playlist");
     m_removeFromPlaylistButton->setEnabled(false);
+    m_addCustomWallpaperButton = new QPushButton("Add Your Wallpaper");
+    // Button is always enabled - it will check addon status when clicked
     
     playlistButtonsLayout->addWidget(m_addToPlaylistButton);
     playlistButtonsLayout->addWidget(m_removeFromPlaylistButton);
+    playlistButtonsLayout->addWidget(m_addCustomWallpaperButton);
     playlistButtonsLayout->addStretch();
     
     leftLayout->addLayout(playlistButtonsLayout);
@@ -395,9 +415,11 @@ void MainWindow::createCentralWidget()
 
     // connect preview to manager so grid updates
     m_wallpaperPreview->setWallpaperManager(m_wallpaperManager);
+    m_wallpaperPreview->setWNELAddon(m_wnelAddon);  // Connect WNEL addon to preview
     
     // connect playlist to manager so it can launch wallpapers
     m_wallpaperPlaylist->setWallpaperManager(m_wallpaperManager);
+    m_wallpaperPlaylist->setWNELAddon(m_wnelAddon);  // Connect WNEL addon to playlist
 
     // right: properties panel with 4 tabs
     m_propertiesPanel = new PropertiesPanel;
@@ -434,6 +456,7 @@ void MainWindow::createCentralWidget()
     
     // Create "Wallpaper Playlist" tab
     m_playlistPreview = new PlaylistPreview(m_wallpaperPlaylist, m_wallpaperManager);
+    m_playlistPreview->setWNELAddon(m_wnelAddon);  // Connect WNEL addon to playlist preview
     qCDebug(mainWindow) << "MainWindow::createCentralWidget() - PlaylistPreview created successfully";
     m_mainTabWidget->addTab(m_playlistPreview, "Wallpaper Playlist");
     qCDebug(mainWindow) << "MainWindow::createCentralWidget() - PlaylistPreview added to tab widget";
@@ -441,6 +464,7 @@ void MainWindow::createCentralWidget()
     // Connect playlist button signals
     connect(m_addToPlaylistButton, &QPushButton::clicked, this, &MainWindow::onAddToPlaylistClicked);
     connect(m_removeFromPlaylistButton, &QPushButton::clicked, this, &MainWindow::onRemoveFromPlaylistClicked);
+    connect(m_addCustomWallpaperButton, &QPushButton::clicked, this, &MainWindow::onAddCustomWallpaperClicked);
     
     // Connect playlist preview signals
     connect(m_playlistPreview, &PlaylistPreview::wallpaperSelected, this, &MainWindow::onPlaylistWallpaperSelected);
@@ -477,12 +501,29 @@ void MainWindow::createCentralWidget()
             this, [this](const QString& wallpaperId, const QStringList& args) {
                 Q_UNUSED(args) // Args already handled in playlist settings loading
                 // Find wallpaper info and launch with playlist source
+                
+                // First try regular wallpapers
                 if (m_wallpaperManager) {
                     auto wallpaperInfo = m_wallpaperManager->getWallpaperInfo(wallpaperId);
                     if (wallpaperInfo.has_value()) {
                         launchWallpaperWithSource(wallpaperInfo.value(), LaunchSource::Playlist);
+                        return;
                     }
                 }
+                
+                // If not found in regular wallpapers, try external wallpapers
+                if (m_wnelAddon) {
+                    QList<ExternalWallpaperInfo> externalWallpapers = m_wnelAddon->getAllExternalWallpapers();
+                    for (const ExternalWallpaperInfo& external : externalWallpapers) {
+                        if (external.id == wallpaperId) {
+                            WallpaperInfo wallpaperInfo = external.toWallpaperInfo();
+                            launchWallpaperWithSource(wallpaperInfo, LaunchSource::Playlist);
+                            return;
+                        }
+                    }
+                }
+                
+                qWarning() << "Playlist requested launch of wallpaper ID" << wallpaperId << "but it was not found in regular or external wallpapers";
             });
 
     // initial splitter sizing
@@ -1031,6 +1072,16 @@ void MainWindow::onRefreshFinished()
         } else if (!m_pendingRestoreWallpaperId.isEmpty()) {
             // Find the wallpaper by ID for individual wallpaper restoration
             WallpaperInfo wallpaperToRestore = m_wallpaperManager->getWallpaperById(m_pendingRestoreWallpaperId);
+            
+            // If not found in regular wallpapers, check external wallpapers
+            if (wallpaperToRestore.id.isEmpty() && m_wnelAddon) {
+                ExternalWallpaperInfo externalInfo = m_wnelAddon->getExternalWallpaperById(m_pendingRestoreWallpaperId);
+                if (!externalInfo.id.isEmpty()) {
+                    wallpaperToRestore = externalInfo.toWallpaperInfo();
+                    qCDebug(mainWindow) << "Found external wallpaper to restore:" << wallpaperToRestore.name;
+                }
+            }
+            
             if (!wallpaperToRestore.id.isEmpty()) {
                 qCInfo(mainWindow) << "Found wallpaper to restore:" << wallpaperToRestore.name;
                 
@@ -1225,7 +1276,22 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
         }
         
         // Launch wallpaper with error handling and custom settings
-        bool success = m_wallpaperManager->launchWallpaper(wallpaper.id, additionalArgs);
+        bool success = false;
+        
+        // Check if this is an external wallpaper
+        if (wallpaper.type == "External" && m_wnelAddon && m_wnelAddon->isEnabled()) {
+            qCDebug(mainWindow) << "Launching external wallpaper via WNEL addon";
+            // Ensure regular wallpaper engine is stopped before launching external wallpaper
+            m_wallpaperManager->stopWallpaper();
+            success = m_wnelAddon->launchExternalWallpaper(wallpaper.id, additionalArgs);
+        } else {
+            qCDebug(mainWindow) << "Launching regular wallpaper via WallpaperManager";
+            // Ensure external wallpaper is stopped before launching regular wallpaper
+            if (m_wnelAddon) {
+                m_wnelAddon->stopWallpaper();
+            }
+            success = m_wallpaperManager->launchWallpaper(wallpaper.id, additionalArgs);
+        }
         
         qCDebug(mainWindow) << "Wallpaper manager launch result:" << success;
         
@@ -1393,12 +1459,34 @@ void MainWindow::onOutputReceived(const QString& output)
     m_outputTextEdit->update();
     QApplication::processEvents();
     
-    // Switch to output tab for important messages (errors, launches, warnings)
-    // Don't switch for normal LOG messages which are just operational info
-    if (output.contains("ERROR") || output.contains("FAILED") || output.contains("WARNING") ||
-        output.contains("Launching") || output.contains("Command:") || 
+    // Only switch to output tab for critical errors or initial launch messages
+    // Avoid switching for repetitive/cyclic error messages that would interfere with user interaction
+    static QDateTime lastTabSwitch;
+    static QString lastError;
+    QDateTime now = QDateTime::currentDateTime();
+    
+    bool shouldSwitch = false;
+    
+    // Only switch for important non-repetitive messages
+    if (output.contains("Launching") || output.contains("Command:") || 
         output.contains("process finished") || output.contains("Stopping")) {
-        m_rightTabWidget->setCurrentIndex(0); // Output tab
+        shouldSwitch = true;
+    } else if (output.contains("ERROR") || output.contains("FAILED") || output.contains("WARNING")) {
+        // For errors, only switch if it's a new error or sufficient time has passed
+        // This prevents cyclic errors from interfering with tab switching
+        if (output != lastError || lastTabSwitch.secsTo(now) > 10) {
+            shouldSwitch = true;
+            lastError = output;
+        }
+    }
+    
+    if (shouldSwitch) {
+        // Only switch if the user isn't currently interacting with tabs
+        // Check if enough time has passed since the last switch to avoid rapid switching
+        if (lastTabSwitch.secsTo(now) > 2 && !m_propertiesPanel->isUserInteractingWithTabs()) {
+            m_rightTabWidget->setCurrentIndex(0); // Output tab
+            lastTabSwitch = now;
+        }
     }
 }
 
@@ -1560,9 +1648,22 @@ void MainWindow::onPlaylistWallpaperSelected(const QString& wallpaperId)
     
     // Find wallpaper info and update properties panel
     auto wallpaperInfo = m_wallpaperManager->getWallpaperInfo(wallpaperId);
+    WallpaperInfo info;
+    
     if (wallpaperInfo.has_value()) {
+        // Regular wallpaper found
+        info = wallpaperInfo.value();
+    } else if (m_wnelAddon) {
+        // Check if it's an external wallpaper
+        ExternalWallpaperInfo externalInfo = m_wnelAddon->getExternalWallpaperById(wallpaperId);
+        if (!externalInfo.id.isEmpty()) {
+            info = externalInfo.toWallpaperInfo();
+            qCDebug(mainWindow) << "Found external wallpaper in playlist:" << info.name;
+        }
+    }
+    
+    if (!info.id.isEmpty()) {
         // Convert to the WallpaperInfo struct format expected by onWallpaperSelected
-        WallpaperInfo info = wallpaperInfo.value();
         onWallpaperSelected(info);
         
         // Also update the wallpaper selection in WallpaperPreview to sync visual selection
@@ -1572,6 +1673,8 @@ void MainWindow::onPlaylistWallpaperSelected(const QString& wallpaperId)
         
         // Switch to "All Wallpapers" tab to show details
         m_mainTabWidget->setCurrentIndex(0);
+    } else {
+        qCWarning(mainWindow) << "Wallpaper not found in playlist selection:" << wallpaperId;
     }
 }
 
@@ -1640,4 +1743,90 @@ void MainWindow::updatePlaylistButtonStates()
     if (removeFromPlaylistAction) {
         removeFromPlaylistAction->setEnabled(hasSelection && isInPlaylist);
     }
+}
+
+void MainWindow::onAddCustomWallpaperClicked()
+{
+    if (!m_wnelAddon->isEnabled()) {
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle("Enable WNEL Addon");
+        msgBox.setIcon(QMessageBox::Information);
+        msgBox.setText("To add custom wallpapers (images, GIFs, videos), you need to enable the wallpaper_not-engine_linux addon.");
+        msgBox.setInformativeText("1. Go to Settings > Extra tab\n"
+                                 "2. Check \"Enable wallpaper_not-engine_linux addon support\"\n"
+                                 "3. Configure the addon paths\n"
+                                 "4. Click OK to save settings\n\n"
+                                 "Then you can add your own wallpapers!");
+        
+        QPushButton* openSettingsButton = msgBox.addButton("Open Settings", QMessageBox::ActionRole);
+        msgBox.addButton("Cancel", QMessageBox::RejectRole);
+        
+        msgBox.exec();
+        
+        if (msgBox.clickedButton() == openSettingsButton) {
+            // Open settings dialog
+            openSettings();
+        }
+        return;
+    }
+    
+    // Open file dialog to select media file
+    QStringList supportedFormats;
+    supportedFormats << "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.webp)"
+                     << "Videos (*.mp4 *.avi *.mkv *.mov *.webm *.m4v)"
+                     << "GIFs (*.gif)"
+                     << "All Files (*)";
+    
+    QString mediaPath = QFileDialog::getOpenFileName(this,
+        "Select Media File for Custom Wallpaper",
+        QStandardPaths::writableLocation(QStandardPaths::PicturesLocation),
+        supportedFormats.join(";;"));
+    
+    if (mediaPath.isEmpty()) {
+        return;
+    }
+    
+    // Ask for custom name
+    bool ok;
+    QString customName = QInputDialog::getText(this, "Custom Wallpaper Name",
+        "Enter a name for your custom wallpaper:", QLineEdit::Normal,
+        QFileInfo(mediaPath).baseName(), &ok);
+    
+    if (!ok || customName.isEmpty()) {
+        return;
+    }
+    
+    // Add the wallpaper
+    QString wallpaperId = m_wnelAddon->addExternalWallpaper(mediaPath, customName);
+    if (wallpaperId.isEmpty()) {
+        QMessageBox::warning(this, "Error", "Failed to add custom wallpaper. Check the log for details.");
+        return;
+    }
+    
+    QMessageBox::information(this, "Success", 
+        QString("Custom wallpaper '%1' has been added successfully!").arg(customName));
+    
+    // Note: Don't call refreshWallpapers() here - it's already called by the signal handler onExternalWallpaperAdded()
+}
+
+void MainWindow::onExternalWallpaperAdded(const QString& wallpaperId)
+{
+    qCDebug(mainWindow) << "External wallpaper added:" << wallpaperId;
+    
+    // Note: Don't refresh here - WallpaperPreview already handles this via its own signal connection
+    // to avoid duplicate refreshes that can cause multiple preview windows
+    
+    // Update status
+    m_statusLabel->setText("External wallpaper added successfully");
+}
+
+void MainWindow::onExternalWallpaperRemoved(const QString& wallpaperId)
+{
+    qCDebug(mainWindow) << "External wallpaper removed:" << wallpaperId;
+    
+    // Note: Don't refresh here - WallpaperPreview already handles this via its own signal connection
+    // to avoid duplicate refreshes
+    
+    // Update status
+    m_statusLabel->setText("External wallpaper removed");
 }

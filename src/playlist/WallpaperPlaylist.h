@@ -10,6 +10,9 @@
 #include "../core/WallpaperManager.h"
 #include "../ui/PropertiesPanel.h" // For WallpaperSettings
 
+// Forward declaration to avoid circular dependency
+class WNELAddon;
+
 enum class PlaybackOrder {
     Cycle,
     Random
@@ -69,6 +72,9 @@ public:
 
     // WallpaperManager connection
     void setWallpaperManager(WallpaperManager* manager);
+    
+    // WNELAddon connection
+    void setWNELAddon(WNELAddon* addon);
 
     // Persistence
     void saveToConfig();
@@ -106,6 +112,7 @@ private:
     QStringList m_randomHistory; // For random playback without repeats
     
     WallpaperManager* m_wallpaperManager;
+    WNELAddon* m_wnelAddon;
 };
 
 #endif // WALLPAPERPLAYLIST_H

@@ -50,6 +50,9 @@ void SettingsDialog::setupUI()
     // Create Theme tab
     tabWidget->addTab(createThemeTab(), "Theme");
     
+    // Create Extra tab
+    tabWidget->addTab(createExtraTab(), "Extra");
+    
     // Create button box
     auto *buttonLayout = new QHBoxLayout;
     
@@ -399,6 +402,92 @@ QWidget* SettingsDialog::createThemeTab()
     return widget;
 }
 
+QWidget* SettingsDialog::createExtraTab()
+{
+    auto* widget = new QWidget;
+    auto* mainLayout = new QVBoxLayout(widget);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    
+    // Create scroll area for extra tab
+    auto* scrollArea = new QScrollArea;
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    
+    auto* scrollWidget = new QWidget;
+    auto* layout = new QVBoxLayout(scrollWidget);
+    layout->setContentsMargins(12, 12, 12, 12);
+    
+    // wallpaper_not-engine_linux addon section
+    auto* wnelGroup = new QGroupBox("wallpaper_not-engine_linux Addon");
+    auto* wnelLayout = new QVBoxLayout(wnelGroup);
+    
+    // Enable checkbox
+    m_enableWNELCheckbox = new QCheckBox("Enable support for wallpaper_not-engine_linux addon");
+    wnelLayout->addWidget(m_enableWNELCheckbox);
+    
+    // Description
+    m_wnelDescriptionLabel = new QLabel(
+        "This addon adds support for custom wallpapers (images, GIFs, and videos) using the lightweight "
+        "wallpaper_not-engine_linux binary. It provides GPU-accelerated video playback with audio support, "
+        "multi-monitor compatibility, and works on both X11 and Wayland."
+    );
+    m_wnelDescriptionLabel->setWordWrap(true);
+    m_wnelDescriptionLabel->setStyleSheet("QLabel { color: #666; margin: 8px 0px; }");
+    wnelLayout->addWidget(m_wnelDescriptionLabel);
+    
+    // Addon URL
+    auto* urlLayout = new QHBoxLayout;
+    auto* urlLabel = new QLabel("Addon repository:");
+    m_copyWNELUrlButton = new QPushButton("Copy URL to clipboard");
+    m_copyWNELUrlButton->setToolTip("https://github.com/MikiDevLog/wallpaper_not-engine_linux");
+    urlLayout->addWidget(urlLabel);
+    urlLayout->addWidget(m_copyWNELUrlButton);
+    urlLayout->addStretch();
+    wnelLayout->addLayout(urlLayout);
+    
+    // External wallpapers path
+    auto* pathLayout = new QHBoxLayout;
+    auto* pathLabel = new QLabel("External wallpapers folder:");
+    m_externalWallpapersPathEdit = new QLineEdit;
+    m_externalWallpapersPathEdit->setPlaceholderText("Path where custom wallpapers will be stored");
+    m_browseExternalPathButton = new QPushButton("Browse...");
+    pathLayout->addWidget(pathLabel);
+    pathLayout->addWidget(m_externalWallpapersPathEdit);
+    pathLayout->addWidget(m_browseExternalPathButton);
+    wnelLayout->addLayout(pathLayout);
+    
+    // WNEL binary path
+    auto* binaryLayout = new QHBoxLayout;
+    auto* binaryLabel = new QLabel("wallpaper_ne_linux binary:");
+    m_wnelBinaryPathEdit = new QLineEdit;
+    m_wnelBinaryPathEdit->setPlaceholderText("Path to wallpaper_ne_linux binary");
+    m_browseWNELBinaryButton = new QPushButton("Browse...");
+    m_testWNELBinaryButton = new QPushButton("Test");
+    binaryLayout->addWidget(binaryLabel);
+    binaryLayout->addWidget(m_wnelBinaryPathEdit);
+    binaryLayout->addWidget(m_browseWNELBinaryButton);
+    binaryLayout->addWidget(m_testWNELBinaryButton);
+    wnelLayout->addLayout(binaryLayout);
+    
+    // Connect signals
+    connect(m_enableWNELCheckbox, &QCheckBox::toggled, this, &SettingsDialog::onWNELEnabledChanged);
+    connect(m_copyWNELUrlButton, &QPushButton::clicked, this, &SettingsDialog::copyWNELUrlToClipboard);
+    connect(m_browseExternalPathButton, &QPushButton::clicked, this, &SettingsDialog::browseExternalWallpapersPath);
+    connect(m_browseWNELBinaryButton, &QPushButton::clicked, this, &SettingsDialog::browseWNELBinaryPath);
+    connect(m_testWNELBinaryButton, &QPushButton::clicked, this, &SettingsDialog::testWNELBinary);
+    
+    layout->addWidget(wnelGroup);
+    layout->addStretch();
+    
+    // Set the scroll widget
+    scrollArea->setWidget(scrollWidget);
+    mainLayout->addWidget(scrollArea);
+    
+    return widget;
+}
+
 void SettingsDialog::loadSettings()
 {
     // Paths
@@ -474,6 +563,14 @@ void SettingsDialog::loadSettings()
             m_themeComboBox->setCurrentText("System Default");
         }
     }
+    
+    // Load WNEL settings
+    m_enableWNELCheckbox->setChecked(m_config.isWNELAddonEnabled());
+    m_externalWallpapersPathEdit->setText(m_config.externalWallpapersPath());
+    m_wnelBinaryPathEdit->setText(m_config.wnelBinaryPath());
+    
+    // Update UI state based on WNEL enabled state
+    onWNELEnabledChanged(m_enableWNELCheckbox->isChecked());
 }
 
 void SettingsDialog::saveSettings()
@@ -503,6 +600,11 @@ void SettingsDialog::saveSettings()
     } else {
         m_config.setTheme(selectedTheme);
     }
+    
+    // Save WNEL settings
+    m_config.setWNELAddonEnabled(m_enableWNELCheckbox->isChecked());
+    m_config.setExternalWallpapersPath(m_externalWallpapersPathEdit->text());
+    m_config.setWNELBinaryPath(m_wnelBinaryPathEdit->text());
     
     // Mark first run as complete if configuration is now valid
     if (m_config.isConfigurationValid()) {
@@ -746,4 +848,122 @@ void SettingsDialog::copyApiKeyUrlToClipboard(const QString& url)
     QClipboard *clipboard = QApplication::clipboard();
     clipboard->setText(url);
     QMessageBox::information(this, tr("Link Copied"), tr("Steam API key URL copied to clipboard."));
+}
+
+// Extra tab slots implementation
+void SettingsDialog::onWNELEnabledChanged(bool enabled)
+{
+    // Enable/disable related controls
+    m_externalWallpapersPathEdit->setEnabled(enabled);
+    m_browseExternalPathButton->setEnabled(enabled);
+    m_wnelBinaryPathEdit->setEnabled(enabled);
+    m_browseWNELBinaryButton->setEnabled(enabled);
+    
+    if (enabled) {
+        if (m_externalWallpapersPathEdit->text().isEmpty()) {
+            // Set default path if none is set
+            QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + "/external_wallpapers";
+            m_externalWallpapersPathEdit->setText(defaultPath);
+        }
+        
+        if (m_wnelBinaryPathEdit->text().isEmpty()) {
+            // Try to find wallpaper_ne_linux in PATH
+            QString binaryPath = QStandardPaths::findExecutable("wallpaper_ne_linux");
+            if (!binaryPath.isEmpty()) {
+                m_wnelBinaryPathEdit->setText(binaryPath);
+            } else {
+                // Set default expected path
+                m_wnelBinaryPathEdit->setText("wallpaper_ne_linux");
+            }
+        }
+    }
+}
+
+void SettingsDialog::copyWNELUrlToClipboard()
+{
+    QClipboard* clipboard = QApplication::clipboard();
+    QString url = "https://github.com/MikiDevLog/wallpaper_not-engine_linux";
+    clipboard->setText(url);
+    QMessageBox::information(this, "URL Copied", "wallpaper_not-engine_linux repository URL copied to clipboard.");
+}
+
+void SettingsDialog::browseExternalWallpapersPath()
+{
+    QString currentPath = m_externalWallpapersPathEdit->text();
+    if (currentPath.isEmpty()) {
+        currentPath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+    }
+    
+    QString path = QFileDialog::getExistingDirectory(this, "Select External Wallpapers Directory", currentPath);
+    if (!path.isEmpty()) {
+        m_externalWallpapersPathEdit->setText(path);
+    }
+}
+
+void SettingsDialog::browseWNELBinaryPath()
+{
+    QString currentPath = m_wnelBinaryPathEdit->text();
+    if (currentPath.isEmpty()) {
+        currentPath = QStandardPaths::findExecutable("wallpaper_ne_linux");
+        if (currentPath.isEmpty()) {
+            currentPath = "/usr/local/bin";
+        }
+    }
+    
+    QString path = QFileDialog::getOpenFileName(this, "Select wallpaper_ne_linux Binary", 
+                                               QFileInfo(currentPath).absolutePath(),
+                                               "Executable files (wallpaper_ne_linux);;All files (*)");
+    if (!path.isEmpty()) {
+        m_wnelBinaryPathEdit->setText(path);
+    }
+}
+
+void SettingsDialog::testWNELBinary()
+{
+    QString binaryPath = m_wnelBinaryPathEdit->text().trimmed();
+    if (binaryPath.isEmpty()) {
+        QMessageBox::warning(this, "Test Failed", "Please specify the path to wallpaper_ne_linux binary first.");
+        return;
+    }
+    
+    // Test if the binary exists and is executable
+    QFileInfo binaryInfo(binaryPath);
+    if (!binaryInfo.exists()) {
+        QMessageBox::warning(this, "Test Failed", QString("Binary not found at: %1").arg(binaryPath));
+        return;
+    }
+    
+    if (!binaryInfo.isExecutable()) {
+        QMessageBox::warning(this, "Test Failed", QString("File is not executable: %1").arg(binaryPath));
+        return;
+    }
+    
+    // Run the binary with --help flag to test it
+    QProcess testProcess;
+    testProcess.start(binaryPath, QStringList() << "--help");
+    
+    if (!testProcess.waitForStarted(3000)) {
+        QMessageBox::warning(this, "Test Failed", "Failed to start the binary. Check if it's a valid executable.");
+        return;
+    }
+    
+    if (!testProcess.waitForFinished(5000)) {
+        testProcess.kill();
+        QMessageBox::warning(this, "Test Failed", "Binary test timed out.");
+        return;
+    }
+    
+    QString output = testProcess.readAllStandardOutput();
+    QString error = testProcess.readAllStandardError();
+    
+    if (testProcess.exitCode() == 0 || output.contains("wallpaper_ne_linux") || output.contains("Usage:")) {
+        QMessageBox::information(this, "Test Successful", 
+            QString("wallpaper_ne_linux binary is working correctly!\n\nPath: %1").arg(binaryPath));
+    } else {
+        QString errorMsg = QString("Binary test failed.\nExit code: %1\nOutput: %2\nError: %3")
+                          .arg(testProcess.exitCode())
+                          .arg(output.left(200))
+                          .arg(error.left(200));
+        QMessageBox::warning(this, "Test Failed", errorMsg);
+    }
 }

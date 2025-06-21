@@ -1,5 +1,6 @@
 #include "WallpaperPreview.h"
 #include "../core/ConfigManager.h"
+#include "../addons/WNELAddon.h"  // Add WNEL addon include
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -1056,6 +1057,7 @@ void WallpaperPreviewItem::tryLoadFromSteamCache()
 WallpaperPreview::WallpaperPreview(QWidget* parent)
     : QWidget(parent)
     , m_wallpaperManager(nullptr)
+    , m_wnelAddon(nullptr)  // Initialize WNEL addon pointer
     , m_searchEdit(nullptr)
     , m_filterCombo(nullptr)
     , m_refreshButton(nullptr)
@@ -1099,7 +1101,7 @@ void WallpaperPreview::setupUI()
     connect(m_searchEdit, &QLineEdit::textChanged, this, &WallpaperPreview::onSearchTextChanged);
     
     m_filterCombo = new QComboBox;
-    m_filterCombo->addItems({"All Types", "Scene", "Video", "Web"});
+    m_filterCombo->addItems({"All Types", "Scene", "Video", "Web", "External"});
     connect(m_filterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), 
             this, &WallpaperPreview::onFilterChanged);
     
@@ -1166,6 +1168,18 @@ void WallpaperPreview::setWallpaperManager(WallpaperManager* manager)
     }
 }
 
+void WallpaperPreview::setWNELAddon(WNELAddon* wnelAddon)
+{
+    m_wnelAddon = wnelAddon;
+    
+    if (m_wnelAddon) {
+        connect(m_wnelAddon, &WNELAddon::externalWallpaperAdded,
+                this, &WallpaperPreview::onWallpapersChanged);
+        connect(m_wnelAddon, &WNELAddon::externalWallpaperRemoved,
+                this, &WallpaperPreview::onWallpapersChanged);
+    }
+}
+
 void WallpaperPreview::onWallpapersChanged()
 {
     qCDebug(wallpaperPreview) << "onWallpapersChanged - refreshing grid";
@@ -1225,11 +1239,21 @@ void WallpaperPreview::onWallpaperItemDoubleClicked(const WallpaperInfo& wallpap
 
 QList<WallpaperInfo> WallpaperPreview::getFilteredWallpapers() const
 {
-    if (!m_wallpaperManager) {
-        return QList<WallpaperInfo>();
+    QList<WallpaperInfo> allWallpapers;
+    
+    // Get regular wallpapers from WallpaperManager
+    if (m_wallpaperManager) {
+        allWallpapers = m_wallpaperManager->getAllWallpapers();
     }
     
-    QList<WallpaperInfo> allWallpapers = m_wallpaperManager->getAllWallpapers();
+    // Get external wallpapers from WNELAddon
+    if (m_wnelAddon && m_wnelAddon->isEnabled()) {
+        QList<ExternalWallpaperInfo> externalWallpapers = m_wnelAddon->getAllExternalWallpapers();
+        for (const ExternalWallpaperInfo& external : externalWallpapers) {
+            allWallpapers.append(external.toWallpaperInfo());
+        }
+    }
+    
     QList<WallpaperInfo> filtered;
     
     QString searchText = m_searchEdit->text().toLower();
@@ -1253,6 +1277,14 @@ QList<WallpaperInfo> WallpaperPreview::getFilteredWallpapers() const
 
 void WallpaperPreview::updateWallpaperGrid()
 {
+    // Prevent multiple concurrent updates
+    if (m_layoutUpdatePending) {
+        qCDebug(wallpaperPreview) << "Grid update already pending, skipping";
+        return;
+    }
+    
+    m_layoutUpdatePending = true;
+    
     clearCurrentPage();
     
     m_filteredWallpapers = getFilteredWallpapers();
@@ -1264,6 +1296,8 @@ void WallpaperPreview::updateWallpaperGrid()
     
     loadCurrentPage();
     updatePageInfo();
+    
+    m_layoutUpdatePending = false;
 }
 
 void WallpaperPreview::loadCurrentPage()

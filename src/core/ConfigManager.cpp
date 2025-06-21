@@ -620,3 +620,38 @@ void ConfigManager::setShowTrayWarning(bool show)
     m_settings->setValue("ui/show_tray_warning", show);
     m_settings->sync();
 }
+
+// WNEL Addon settings
+bool ConfigManager::isWNELAddonEnabled() const
+{
+    return m_settings->value("wnel/enabled", false).toBool();
+}
+
+void ConfigManager::setWNELAddonEnabled(bool enabled)
+{
+    m_settings->setValue("wnel/enabled", enabled);
+    m_settings->sync();
+}
+
+QString ConfigManager::externalWallpapersPath() const
+{
+    QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + "/external_wallpapers";
+    return m_settings->value("wnel/external_wallpapers_path", defaultPath).toString();
+}
+
+void ConfigManager::setExternalWallpapersPath(const QString& path)
+{
+    m_settings->setValue("wnel/external_wallpapers_path", path);
+    m_settings->sync();
+}
+
+QString ConfigManager::wnelBinaryPath() const
+{
+    return m_settings->value("wnel/binary_path", "").toString();
+}
+
+void ConfigManager::setWNELBinaryPath(const QString& path)
+{
+    m_settings->setValue("wnel/binary_path", path);
+    m_settings->sync();
+}

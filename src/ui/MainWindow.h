@@ -27,6 +27,7 @@ class ConfigManager;
 class WallpaperManager;
 class WallpaperPlaylist;
 class PlaylistPreview;
+class WNELAddon;
 struct WallpaperInfo;
 
 // Custom QTabWidget that accepts drops on tab buttons
@@ -89,6 +90,7 @@ private slots:
     // Playlist slots
     void onAddToPlaylistClicked();
     void onRemoveFromPlaylistClicked();
+    void onAddCustomWallpaperClicked();  // New slot
     void onPlaylistWallpaperSelected(const QString& wallpaperId);
     void onRemoveFromPlaylistRequested(const QString& wallpaperId);
     void onWallpaperDroppedOnPlaylistTab(const QString& wallpaperId);
@@ -101,6 +103,10 @@ private slots:
     void showWindow();
     void hideToTray();
     void quitApplication();
+    
+    // WNEL addon slots
+    void onExternalWallpaperAdded(const QString& wallpaperId);
+    void onExternalWallpaperRemoved(const QString& wallpaperId);
 
 private:
     void setupUI();
@@ -136,6 +142,7 @@ private:
     // Playlist UI components
     QPushButton *m_addToPlaylistButton;
     QPushButton *m_removeFromPlaylistButton;
+    QPushButton *m_addCustomWallpaperButton;  // New button for adding custom wallpapers
     
     // Menu and toolbar
     QAction *m_refreshAction;
@@ -156,6 +163,7 @@ private:
     ConfigManager& m_config;
     WallpaperManager *m_wallpaperManager;
     WallpaperPlaylist *m_wallpaperPlaylist;
+    WNELAddon *m_wnelAddon;  // WNEL addon manager
     
     // State
     QString m_currentWallpaperId;

@@ -55,6 +55,15 @@ struct WallpaperSettings {
     bool disableMouse = false;
     bool disableParallax = false;
     bool noFullscreenPause = false;
+    
+    // WNEL-specific settings
+    bool noLoop = false;
+    bool noHardwareDecode = false;
+    bool forceX11 = false;
+    bool forceWayland = false;
+    bool verbose = false;
+    QString logLevel = "info";  // debug, info, warn, error
+    QString mpvOptions = "";
 
     // Convert settings to command line arguments
     QStringList toCommandLineArgs() const;
@@ -75,6 +84,9 @@ public:
     bool hasUnsavedChanges() const;
     bool showUnsavedChangesDialog();
     void resetUnsavedChanges();
+    
+    // Tab interaction tracking
+    bool isUserInteractingWithTabs() const { return m_userInteractingWithTabs; }
 
 signals:
     void launchWallpaper(const WallpaperInfo& wallpaper);
@@ -96,6 +108,7 @@ private slots:
     // New slots for unsaved changes handling
     void onTabBarClicked(int index);
     void copyWallpaperIdToClipboard();
+    void onSaveExternalNameClicked();
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -121,7 +134,9 @@ private:
     
     // Modified method to take a settings tab as parameter
     void setupSettingsUI(QWidget* settingsTab);
+    void setupExternalWallpaperUI();
     void updateSettingsControls();
+    void updateWNELSettingsVisibility(bool isExternalWallpaper);
     bool loadWallpaperSettings(const QString& wallpaperId);
     bool saveWallpaperSettings(const QString& wallpaperId);
     QString getSettingsFilePath(const QString& wallpaperId);
@@ -177,6 +192,19 @@ private:
     QCheckBox* m_disableParallaxCheckBox;
     QCheckBox* m_noFullscreenPauseCheckBox;
     
+    // External wallpaper settings controls
+    QLineEdit* m_externalNameEdit;
+    QPushButton* m_saveExternalNameButton;
+    
+    // WNEL-specific settings controls
+    QCheckBox* m_noLoopCheckBox;
+    QCheckBox* m_noHardwareDecodeCheckBox;
+    QCheckBox* m_forceX11CheckBox;
+    QCheckBox* m_forceWaylandCheckBox;
+    QCheckBox* m_verboseCheckBox;
+    QComboBox* m_logLevelCombo;
+    QLineEdit* m_mpvOptionsEdit;
+    
     // Current wallpaper
     WallpaperInfo m_currentWallpaper;
     WallpaperSettings m_currentSettings;
@@ -197,11 +225,30 @@ private:
     
     // New member variables for unsaved changes handling
     bool m_ignoreTabChange;
+    bool m_userInteractingWithTabs;  // Track when user is actively switching tabs
+    
+    // UI elements that need to be hidden/shown based on wallpaper type
+    QWidget* m_idSection;  // ID section with copy button
+    QWidget* m_steamSection;  // Steam-specific metadata section
+    QWidget* m_regularEngineSection;  // Regular engine settings not supported by WNEL
+    
+    // Individual setting widgets and their labels for visibility control
+    QLabel* m_windowGeometryLabel;
+    QWidget* m_windowGeometryWidget;
+    QLabel* m_backgroundIdLabel;
+    QWidget* m_backgroundIdWidget;
+    QLabel* m_clampingLabel;
+    QWidget* m_clampingWidget;
+    QWidget* m_noAudioProcessingWidget;
     
     // Helper methods for Steam API data
     void updateSteamApiMetadata(const WallpaperInfo& wallpaper);
     void refreshWallpaperMetadata();
     void onApiMetadataReceived(const QString& itemId, const WorkshopItemInfo& info);
+    
+    // UI visibility management
+    void updateUIVisibilityForWallpaperType(bool isExternal);
+    QString getExternalWallpaperFilePath(const QString& wallpaperId);
     
     // Animation helper methods for preview
     void startPreviewAnimation();

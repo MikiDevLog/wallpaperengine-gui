@@ -1,5 +1,6 @@
 #include "WallpaperPlaylist.h"
 #include "../core/ConfigManager.h"
+#include "../addons/WNELAddon.h"  // Add WNELAddon include
 #include <QJsonDocument>
 #include <QRandomGenerator>
 #include <QDebug>
@@ -16,6 +17,7 @@ WallpaperPlaylist::WallpaperPlaylist(QObject* parent)
     , m_playbackTimer(new QTimer(this))
     , m_currentIndex(-1)
     , m_wallpaperManager(nullptr)
+    , m_wnelAddon(nullptr)
 {
     connect(m_playbackTimer, &QTimer::timeout, this, &WallpaperPlaylist::onTimerTimeout);
     m_playbackTimer->setSingleShot(false);
@@ -559,4 +561,10 @@ void WallpaperPlaylist::setWallpaperManager(WallpaperManager* manager)
 {
     qCDebug(wallpaperPlaylist) << "WallpaperPlaylist::setWallpaperManager() - Setting manager:" << (manager ? "valid" : "null");
     m_wallpaperManager = manager;
+}
+
+void WallpaperPlaylist::setWNELAddon(WNELAddon* addon)
+{
+    qCDebug(wallpaperPlaylist) << "WallpaperPlaylist::setWNELAddon() - Setting addon:" << (addon ? "valid" : "null");
+    m_wnelAddon = addon;
 }
