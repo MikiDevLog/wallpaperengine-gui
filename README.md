@@ -1,6 +1,13 @@
 # WallpaperEngine GUI
 
 GUI for the [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine).
+Now has a pluggable addon [wallpaper_not-engine_linux](https://github.com/MikiDevLog/wallpaper_not-engine_linux).
+In short - will allow to run regular media files in full compatibility with regular wallpapers on x11 and Wayland too, just like in Wallpaper Engine (this feature is experemental due to lack of testing in different contitions, you can help with this, when you find any issue related to this addon, just submit it to [issues](https://github.com/MikiDevLog/wallpaper_not-engine_linux/issues))
+- No need to transfer your pictures or videos to a separate folder, binding occurs via symlinks.
+- The interface does not change much, allowing to use both types of wallpapers.
+
+# Features
+
 - Mostly automated first setup.
 - Can get information about wallpaper based on workshop id using Steam API and store it. [You need to get API key for that](https://steamcommunity.com/dev/apikey) any domain name will do.
 - Support QT Themes for KDE users.
@@ -10,9 +17,6 @@ GUI for the [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallp
 - Has support for changing wallpaper properties that are specified in project.json with the ability to save them between launches and roll back to the default state
 - Has support for individual settings (settings specific to linux-wallpaperengine) for running wallpapers
 - Has support for working in the system tray
-
-If you're using Fedora and KDE+Wayland (like me), you may have problems initializing GLEW for web wallpapers etc. I'll try to fix and test what's going on and report back. The app will report it as code 5. (there was a false alarm which I fixed but you need to check the engine log for any suspicious events.)
-You can manually check the linux-wallpaperengine call with the formatted string used by the app in the Engine Log tab of your terminal to see if it's a GUI or binary issue.
 
 ## Screenshots
 
@@ -147,6 +151,8 @@ wallpaperengine-gui --debug
 ```
 src/
 ├── main.cpp              # Application entry point
+├── addons/               # For addons
+│   └──WNELAddon*         # wallpaper_not-engine_linux addon
 ├── core/                 # Core functionality
 │   ├── ConfigManager.*   # Configuration management
 │   └── WallpaperManager.*# Wallpaper management logic
