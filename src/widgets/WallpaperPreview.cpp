@@ -1,5 +1,5 @@
 #include "WallpaperPreview.h"
-#include "ConfigManager.h"
+#include "../core/ConfigManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>

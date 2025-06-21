@@ -1,5 +1,5 @@
 #include "SteamApiManager.h"
-#include "ConfigManager.h"
+#include "../core/ConfigManager.h"
 #include <QNetworkRequest>
 #include <QNetworkReply>  // Add this include for QNetworkReply
 #include <QStandardPaths> // Add this include for QStandardPaths

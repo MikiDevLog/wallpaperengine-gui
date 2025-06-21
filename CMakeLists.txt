@@ -20,34 +20,59 @@ set(CMAKE_AUTORCC ON)
 
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/steam)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/ui)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/widgets)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/playlist)
 
 # Source files
 set(SOURCES
+    # Main entry point
     src/main.cpp
-    src/MainWindow.cpp
-    src/WallpaperManager.cpp
-    src/SteamDetector.cpp
-    src/WallpaperPreview.cpp
-    src/PropertiesPanel.cpp
-    src/SettingsDialog.cpp
-    src/ConfigManager.cpp
-    src/SteamApiManager.cpp
-    src/WallpaperPlaylist.cpp
-    src/PlaylistPreview.cpp
+    
+    # Core components
+    src/core/ConfigManager.cpp
+    src/core/WallpaperManager.cpp
+    
+    # Steam integration
+    src/steam/SteamDetector.cpp
+    src/steam/SteamApiManager.cpp
+    
+    # UI components
+    src/ui/MainWindow.cpp
+    src/ui/SettingsDialog.cpp
+    src/ui/PropertiesPanel.cpp
+    
+    # Custom widgets
+    src/widgets/WallpaperPreview.cpp
+    src/widgets/PlaylistPreview.cpp
+    
+    # Playlist functionality
+    src/playlist/WallpaperPlaylist.cpp
 )
 
 # Header files
 set(HEADERS
-    src/MainWindow.h
-    src/WallpaperManager.h
-    src/SteamDetector.h
-    src/WallpaperPreview.h
-    src/PropertiesPanel.h
-    src/SettingsDialog.h
-    src/ConfigManager.h
-    src/SteamApiManager.h
-    src/WallpaperPlaylist.h
-    src/PlaylistPreview.h
+    # Core components
+    src/core/ConfigManager.h
+    src/core/WallpaperManager.h
+    
+    # Steam integration
+    src/steam/SteamDetector.h
+    src/steam/SteamApiManager.h
+    
+    # UI components
+    src/ui/MainWindow.h
+    src/ui/SettingsDialog.h
+    src/ui/PropertiesPanel.h
+    
+    # Custom widgets
+    src/widgets/WallpaperPreview.h
+    src/widgets/PlaylistPreview.h
+    
+    # Playlist functionality
+    src/playlist/WallpaperPlaylist.h
 )
 
 # Resource files

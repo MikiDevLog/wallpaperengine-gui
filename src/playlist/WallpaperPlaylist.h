@@ -7,8 +7,8 @@
 #include <QJsonArray>
 #include <QDateTime>
 #include <QStringList>
-#include "WallpaperManager.h"
-#include "PropertiesPanel.h" // For WallpaperSettings
+#include "../core/WallpaperManager.h"
+#include "../ui/PropertiesPanel.h" // For WallpaperSettings
 
 enum class PlaybackOrder {
     Cycle,

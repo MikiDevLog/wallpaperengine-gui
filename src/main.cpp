@@ -9,8 +9,8 @@
 #include <unistd.h>
 #include <pwd.h>
 #include <cstdlib>
-#include "MainWindow.h"
-#include "ConfigManager.h"
+#include "ui/MainWindow.h"
+#include "core/ConfigManager.h"
 
 // Logging categories
 Q_LOGGING_CATEGORY(appMain, "app.main")

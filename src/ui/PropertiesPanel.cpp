@@ -1,6 +1,6 @@
 #include "PropertiesPanel.h"
-#include "ConfigManager.h"
-#include "SteamApiManager.h"
+#include "../core/ConfigManager.h"
+#include "../steam/SteamApiManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>

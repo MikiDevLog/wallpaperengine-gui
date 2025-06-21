@@ -26,8 +26,8 @@
 #include <QMovie>
 #include <QNetworkAccessManager>
 #include <QRandomGenerator>
-#include "WallpaperPlaylist.h"
-#include "WallpaperManager.h"
+#include "../playlist/WallpaperPlaylist.h"
+#include "../core/WallpaperManager.h"
 
 class PlaylistPreviewItem;
 

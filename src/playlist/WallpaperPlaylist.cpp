@@ -1,5 +1,5 @@
 #include "WallpaperPlaylist.h"
-#include "ConfigManager.h"
+#include "../core/ConfigManager.h"
 #include <QJsonDocument>
 #include <QRandomGenerator>
 #include <QDebug>

@@ -30,8 +30,8 @@
 #include <QProcess>
 #include <QMovie>
 
-#include "WallpaperManager.h"
-#include "SteamApiManager.h" // Add this include for WorkshopItemInfo type
+#include "../core/WallpaperManager.h"
+#include "../steam/SteamApiManager.h" // Add this include for WorkshopItemInfo type
 
 // New struct to hold custom wallpaper settings
 struct WallpaperSettings {

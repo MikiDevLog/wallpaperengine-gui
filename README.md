@@ -147,14 +147,21 @@ wallpaperengine-gui --debug
 ```
 src/
 ├── main.cpp              # Application entry point
-├── MainWindow.*          # Main application window
-├── WallpaperManager.*    # Wallpaper management logic
-├── WallpaperPreview.*    # Wallpaper preview widget
-├── SteamDetector.*       # Steam integration
-├── ConfigManager.*       # Configuration management
-├── SettingsDialog.*      # Settings interface
-├── PropertiesPanel.*     # Wallpaper properties
-└── SteamApiManager.*     # Steam API integration
+├── core/                 # Core functionality
+│   ├── ConfigManager.*   # Configuration management
+│   └── WallpaperManager.*# Wallpaper management logic
+├── steam/                # Steam integration
+│   ├── SteamDetector.*   # Steam installation detection
+│   └── SteamApiManager.* # Steam API integration
+├── ui/                   # Main UI components
+│   ├── MainWindow.*      # Main application window
+│   ├── SettingsDialog.*  # Settings interface
+│   └── PropertiesPanel.* # Wallpaper properties panel
+├── widgets/              # Custom widgets
+│   ├── WallpaperPreview.*# Wallpaper preview widget
+│   └── PlaylistPreview.* # Playlist preview widget
+└── playlist/             # Playlist functionality
+    └── WallpaperPlaylist.*# Playlist management logic
 ```
 
 ### Adding Features

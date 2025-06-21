@@ -28,7 +28,7 @@
 #include <QPainter>
 #include <QDrag>
 #include <QMimeData>
-#include "WallpaperManager.h"
+#include "../core/WallpaperManager.h"
 
 Q_DECLARE_LOGGING_CATEGORY(wallpaperPreview)
 

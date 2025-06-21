@@ -1,7 +1,7 @@
 #include "SettingsDialog.h"
-#include "ConfigManager.h"
-#include "SteamDetector.h"
-#include "SteamApiManager.h"
+#include "../core/ConfigManager.h"
+#include "../steam/SteamDetector.h"
+#include "../steam/SteamApiManager.h"
 #include <QApplication>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
