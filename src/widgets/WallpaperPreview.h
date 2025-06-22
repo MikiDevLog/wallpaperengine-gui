@@ -60,6 +60,7 @@ public:
     void stopAnimation();
     bool isAnimationPlaying() const;
     bool hasAnimatedPreview() const;
+    void loadAnimatedPreview();
     
     // Layout constants with better sizing for text handling
     static constexpr int ITEM_WIDTH = 280;
@@ -107,7 +108,6 @@ private:
     void updateTextLayout();
     void drawTextWithWordWrap(QPainter& painter, const QString& text, const QRect& rect, 
                              const QFont& font, const QColor& color, Qt::Alignment alignment = Qt::AlignLeft);
-    void loadAnimatedPreview();
     
     // Enhanced workshop data methods - updated for Steam API
     void parseWorkshopDataFromFilesystem();
@@ -156,6 +156,10 @@ public:
     
     WallpaperInfo getSelectedWallpaper() const;
     QString getSelectedWallpaperId() const;
+    
+    // Preview animation control for background optimization
+    void stopAllPreviewAnimations();
+    void startAllPreviewAnimations();
 
     // Dynamic layout constants
     static constexpr int ITEMS_PER_PAGE = 20;

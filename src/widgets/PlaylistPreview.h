@@ -46,6 +46,10 @@ public:
     
     // Helper method to get wallpaper info from both regular and external sources
     std::optional<WallpaperInfo> getWallpaperInfo(const QString& wallpaperId) const;
+    
+    // Preview animation control for background optimization
+    void stopAllPreviewAnimations();
+    void startAllPreviewAnimations();
 
     // Layout constants similar to WallpaperPreview
     static constexpr int ITEM_SPACING = 16;
@@ -91,6 +95,8 @@ private:
     void updatePlaylistItems();
     void updatePlaybackControls();
     void updateSettingsUI();
+
+private:
     PlaylistPreviewItem* createPlaylistPreviewItem(const PlaylistItem& item, int index);
     void moveItem(int fromIndex, int toIndex);
     int getDropPosition(const QPoint& pos);
@@ -160,6 +166,13 @@ public:
     // Get wallpaper info for display
     WallpaperInfo getWallpaperInfo() const { return m_wallpaperInfo; }
     
+    // Animation control for preview optimization
+    bool hasAnimatedPreview() const;
+    bool isAnimationPlaying() const;
+    void startAnimation();
+    void stopAnimation();
+    void loadAnimatedPreview();
+    
     // Layout constants (same as WallpaperPreviewItem)
     static constexpr int ITEM_WIDTH = 280;
     static constexpr int ITEM_HEIGHT = 240;
@@ -197,10 +210,6 @@ private:
     void drawTextWithWordWrap(QPainter& painter, const QString& text, const QRect& rect, 
                              const QFont& font, const QColor& color, Qt::Alignment alignment = Qt::AlignLeft);
     void updateTextLayout();
-    void loadAnimatedPreview();
-    bool hasAnimatedPreview() const;
-    void startAnimation();
-    void stopAnimation();
 
     PlaylistItem m_item;
     int m_index;

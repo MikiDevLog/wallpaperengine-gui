@@ -15,25 +15,36 @@
 // Logging categories
 Q_LOGGING_CATEGORY(appMain, "app.main")
 
-static void setupLogging()
+static void setupLogging(bool enableDebug = false)
 {
     // Set up logging patterns
     qSetMessagePattern("[%{time hh:mm:ss.zzz}] [%{category}] %{if-debug}D%{endif}%{if-info}I%{endif}%{if-warning}W%{endif}%{if-critical}C%{endif}: %{message}");
     
-    // Enable debug logging for our app but filter out Qt noise
-    QLoggingCategory::setFilterRules(
-        "app.*.debug=true\n"
-        "qt.*.debug=false\n"
-        "qt.quick.*.debug=false\n"
-        "qt.qpa.*.debug=false\n"
-        "qt.widgets.*.debug=false\n"
-        "qt.core.*.debug=false\n"
-        "qt.gui.*.debug=false\n"
-        "qt.accessibility.*.debug=false\n"
-        "*.debug=false"
-    );
-    
-    qDebug() << "Debug logging enabled with Qt noise filtering";
+    if (enableDebug) {
+        // Enable debug logging for our app categories when --debug flag is used
+        QLoggingCategory::setFilterRules(
+            "app.*.debug=true\n"
+            "qt.*.debug=false\n"
+            "qt.quick.*.debug=false\n"
+            "qt.qpa.*.debug=false\n"
+            "qt.widgets.*.debug=false\n"
+            "qt.core.*.debug=false\n"
+            "qt.gui.*.debug=false\n"
+            "qt.accessibility.*.debug=false\n"
+            "*.debug=false"
+        );
+        qDebug() << "Debug logging enabled with Qt noise filtering";
+    } else {
+        // Only show warnings, critical, and info messages by default
+        QLoggingCategory::setFilterRules(
+            "app.*.debug=false\n"
+            "app.*.info=true\n"
+            "app.*.warning=true\n"
+            "app.*.critical=true\n"
+            "qt.*.debug=false\n"
+            "*.debug=false"
+        );
+    }
 }
 
 static bool checkSudoStatus()
@@ -144,13 +155,35 @@ int main(int argc, char *argv[])
     
     QApplication app(argc, argv);
     
-    // Set up logging FIRST
-    setupLogging();
+    // Parse command line arguments early to check for debug flag
+    QCommandLineParser parser;
+    parser.setApplicationDescription("GUI for linux-wallpaperengine");
+    parser.addHelpOption();
+    parser.addVersionOption();
     
-    qDebug() << "Application created, setting up metadata";
+    QCommandLineOption debugOption(QStringList() << "d" << "debug",
+        "Enable debug output");
+    parser.addOption(debugOption);
     
-    // Set up application metadata
-    setupApplicationMetadata();
+    QCommandLineOption configOption(QStringList() << "c" << "config",
+        "Use custom config file", "config");
+    parser.addOption(configOption);
+    
+    QCommandLineOption minimizedOption(QStringList() << "m" << "minimized",
+        "Start minimized to system tray");
+    parser.addOption(minimizedOption);
+    
+    parser.process(app);
+    
+    // Set up logging with debug flag if provided
+    bool debugEnabled = parser.isSet(debugOption);
+    setupLogging(debugEnabled);
+    
+    if (debugEnabled) {
+        qCDebug(appMain) << "Debug logging enabled via --debug flag";
+    } else {
+        qCInfo(appMain) << "Running with minimal logging (use --debug for verbose output)";
+    }
     
     qCInfo(appMain) << "Starting" << QApplication::applicationDisplayName() 
                     << "version" << QApplication::applicationVersion();
@@ -229,45 +262,18 @@ int main(int argc, char *argv[])
         }
     });
     
-    qDebug() << "Improved message handler installed";
+    // Set up application metadata
+    setupApplicationMetadata();
     
-    // Parse command line arguments
-    QCommandLineParser parser;
-    parser.setApplicationDescription("GUI for linux-wallpaperengine");
-    parser.addHelpOption();
-    parser.addVersionOption();
-    
-    QCommandLineOption debugOption(QStringList() << "d" << "debug",
-        "Enable debug output");
-    parser.addOption(debugOption);
-    
-    QCommandLineOption configOption(QStringList() << "c" << "config",
-        "Use custom config file", "config");
-    parser.addOption(configOption);
-    
-    QCommandLineOption minimizedOption(QStringList() << "m" << "minimized",
-        "Start minimized to system tray");
-    parser.addOption(minimizedOption);
-    
-    parser.process(app);
-    
-    qDebug() << "Command line arguments processed";
-    
-    // Enable debug logging if requested
-    if (parser.isSet(debugOption)) {
-        QLoggingCategory::setFilterRules("*.debug=true");
-        qCInfo(appMain) << "All debug logging enabled via command line";
-    }
-    
-    qDebug() << "Creating config directory";
+    qCDebug(appMain) << "Creating config directory";
     // Create necessary directories
     createConfigDirectory();
     
-    qDebug() << "Setting up application style";
+    qCDebug(appMain) << "Setting up application style";
     // Set up application style
     setupApplicationStyle(app);
     
-    qDebug() << "Initializing ConfigManager";
+    qCDebug(appMain) << "Initializing ConfigManager";
     // Initialize configuration
     ConfigManager &config = ConfigManager::instance();
     
@@ -280,7 +286,7 @@ int main(int argc, char *argv[])
     qCInfo(appMain) << "Config directory:" << config.configDir();
     qCInfo(appMain) << "Using Qt version:" << qVersion();
     
-    qDebug() << "Creating main window";
+    qCDebug(appMain) << "Creating main window";
     // Create and show main window
     MainWindow window;
     
@@ -288,7 +294,7 @@ int main(int argc, char *argv[])
     bool startMinimized = parser.isSet(minimizedOption);
     window.setStartMinimized(startMinimized);
     
-    qDebug() << "Showing main window" << (startMinimized ? "(minimized)" : "");
+    qCDebug(appMain) << "Showing main window" << (startMinimized ? "(minimized)" : "");
     if (!startMinimized) {
         window.show();
     } else {
@@ -297,7 +303,7 @@ int main(int argc, char *argv[])
     
     qCInfo(appMain) << "Application started successfully";
     
-    qDebug() << "Starting event loop";
+    qCDebug(appMain) << "Starting event loop";
     // Run application event loop
     int result = app.exec();
     

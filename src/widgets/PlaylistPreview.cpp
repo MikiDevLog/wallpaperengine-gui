@@ -787,9 +787,14 @@ void PlaylistPreviewItem::startAnimation()
 
 void PlaylistPreviewItem::stopAnimation()
 {
-    if (m_previewMovie && m_previewMovie->isValid()) {
+    if (m_previewMovie && m_previewMovie->state() == QMovie::Running) {
         m_previewMovie->stop();
     }
+}
+
+bool PlaylistPreviewItem::isAnimationPlaying() const
+{
+    return m_previewMovie && m_previewMovie->state() == QMovie::Running;
 }
 
 void PlaylistPreviewItem::setIndex(int index)
@@ -1132,4 +1137,41 @@ std::optional<WallpaperInfo> PlaylistPreview::getWallpaperInfo(const QString& wa
     }
     
     return std::nullopt;
+}
+
+void PlaylistPreview::stopAllPreviewAnimations()
+{
+    qCDebug(playlistPreview) << "Stopping all playlist preview animations to save CPU when minimized";
+    
+    // Stop animations in all playlist preview items
+    for (int row = 0; row < m_gridLayout->rowCount(); ++row) {
+        for (int col = 0; col < m_gridLayout->columnCount(); ++col) {
+            QLayoutItem* layoutItem = m_gridLayout->itemAtPosition(row, col);
+            if (layoutItem && layoutItem->widget()) {
+                PlaylistPreviewItem* item = qobject_cast<PlaylistPreviewItem*>(layoutItem->widget());
+                if (item && item->isAnimationPlaying()) {
+                    item->stopAnimation();
+                }
+            }
+        }
+    }
+}
+
+void PlaylistPreview::startAllPreviewAnimations()
+{
+    qCDebug(playlistPreview) << "Starting playlist preview animations when window becomes active";
+    
+    // Start animations in all playlist preview items that have animated previews
+    for (int row = 0; row < m_gridLayout->rowCount(); ++row) {
+        for (int col = 0; col < m_gridLayout->columnCount(); ++col) {
+            QLayoutItem* layoutItem = m_gridLayout->itemAtPosition(row, col);
+            if (layoutItem && layoutItem->widget()) {
+                PlaylistPreviewItem* item = qobject_cast<PlaylistPreviewItem*>(layoutItem->widget());
+                if (item && item->hasAnimatedPreview() && !item->isAnimationPlaying()) {
+                    // Re-trigger animation loading (this will start it automatically)
+                    item->loadAnimatedPreview();
+                }
+            }
+        }
+    }
 }

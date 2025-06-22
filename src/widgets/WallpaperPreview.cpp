@@ -1788,5 +1788,42 @@ void WallpaperPreview::setShowHiddenWallpapers(bool show)
     // the request in the logs and the button state will be updated in MainWindow
 }
 
+void WallpaperPreview::stopAllPreviewAnimations()
+{
+    qCDebug(wallpaperPreview) << "Stopping all wallpaper preview animations to save CPU when minimized";
+    
+    // Stop animations in all wallpaper preview items
+    for (int row = 0; row < m_gridLayout->rowCount(); ++row) {
+        for (int col = 0; col < m_gridLayout->columnCount(); ++col) {
+            QLayoutItem* layoutItem = m_gridLayout->itemAtPosition(row, col);
+            if (layoutItem && layoutItem->widget()) {
+                WallpaperPreviewItem* item = qobject_cast<WallpaperPreviewItem*>(layoutItem->widget());
+                if (item && item->isAnimationPlaying()) {
+                    item->stopAnimation();
+                }
+            }
+        }
+    }
+}
+
+void WallpaperPreview::startAllPreviewAnimations()
+{
+    qCDebug(wallpaperPreview) << "Starting wallpaper preview animations when window becomes active";
+    
+    // Start animations in all wallpaper preview items that have animated previews
+    for (int row = 0; row < m_gridLayout->rowCount(); ++row) {
+        for (int col = 0; col < m_gridLayout->columnCount(); ++col) {
+            QLayoutItem* layoutItem = m_gridLayout->itemAtPosition(row, col);
+            if (layoutItem && layoutItem->widget()) {
+                WallpaperPreviewItem* item = qobject_cast<WallpaperPreviewItem*>(layoutItem->widget());
+                if (item && item->hasAnimatedPreview() && !item->isAnimationPlaying()) {
+                    // Re-trigger animation loading (this will start it automatically)
+                    item->loadAnimatedPreview();
+                }
+            }
+        }
+    }
+}
+
 // include the moc output for WallpaperPreview.h so staticMetaObject, vtables, signals, etc. are available
 #include "moc_WallpaperPreview.cpp"

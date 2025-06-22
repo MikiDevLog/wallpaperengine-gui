@@ -646,10 +646,32 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::changeEvent(QEvent *event)
 {
     if (event->type() == QEvent::WindowStateChange) {
-        if (isMinimized() && m_systemTrayIcon && m_systemTrayIcon->isVisible()) {
-            hideToTray();
-            event->ignore();
-            return;
+        QWindowStateChangeEvent* stateEvent = static_cast<QWindowStateChangeEvent*>(event);
+        
+        if (isMinimized()) {
+            // Stop all preview animations to save CPU when minimized
+            qCDebug(mainWindow) << "Window minimized - stopping preview animations to save CPU";
+            if (m_wallpaperPreview) {
+                m_wallpaperPreview->stopAllPreviewAnimations();
+            }
+            if (m_playlistPreview) {
+                m_playlistPreview->stopAllPreviewAnimations();
+            }
+            
+            if (m_systemTrayIcon && m_systemTrayIcon->isVisible()) {
+                hideToTray();
+                event->ignore();
+                return;
+            }
+        } else if (stateEvent->oldState() & Qt::WindowMinimized && !(windowState() & Qt::WindowMinimized)) {
+            // Window was restored from minimized - restart preview animations
+            qCDebug(mainWindow) << "Window restored from minimized - restarting preview animations";
+            if (m_wallpaperPreview) {
+                m_wallpaperPreview->startAllPreviewAnimations();
+            }
+            if (m_playlistPreview) {
+                m_playlistPreview->startAllPreviewAnimations();
+            }
         }
     }
     QMainWindow::changeEvent(event);
@@ -797,6 +819,15 @@ void MainWindow::showWindow()
     activateWindow();
     setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
     
+    // Restart preview animations when window is shown
+    qCDebug(mainWindow) << "Window restored from tray - restarting preview animations";
+    if (m_wallpaperPreview) {
+        m_wallpaperPreview->startAllPreviewAnimations();
+    }
+    if (m_playlistPreview) {
+        m_playlistPreview->startAllPreviewAnimations();
+    }
+    
     // Update menu actions
     if (m_showAction && m_hideAction) {
         m_showAction->setEnabled(false);
@@ -808,6 +839,15 @@ void MainWindow::showWindow()
 
 void MainWindow::hideToTray()
 {
+    // Stop all preview animations to save CPU when hidden in tray
+    qCDebug(mainWindow) << "Window hidden to tray - stopping preview animations to save CPU";
+    if (m_wallpaperPreview) {
+        m_wallpaperPreview->stopAllPreviewAnimations();
+    }
+    if (m_playlistPreview) {
+        m_playlistPreview->stopAllPreviewAnimations();
+    }
+    
     hide();
     
     // Update menu actions
