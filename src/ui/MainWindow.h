@@ -69,6 +69,7 @@ protected:
     void closeEvent(QCloseEvent *event) override;
     void changeEvent(QEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
+    void focusInEvent(QFocusEvent *event) override;
 
 private slots:
     void openSettings();
@@ -107,6 +108,11 @@ private slots:
     // WNEL addon slots
     void onExternalWallpaperAdded(const QString& wallpaperId);
     void onExternalWallpaperRemoved(const QString& wallpaperId);
+    
+    // New button slots for Issue #9
+    void onStopWallpaperClicked();
+    void onDeleteExternalWallpaperClicked();
+    void onToggleHiddenWallpapersClicked();
 
 private:
     void setupUI();
@@ -144,6 +150,11 @@ private:
     QPushButton *m_removeFromPlaylistButton;
     QPushButton *m_addCustomWallpaperButton;  // New button for adding custom wallpapers
     
+    // New buttons for Issue #9 improvements
+    QPushButton *m_stopWallpaperButton;        // Stop wallpaper rendering
+    QPushButton *m_deleteExternalButton;       // Delete external wallpapers
+    QPushButton *m_toggleHiddenButton;         // Toggle hidden wallpapers visibility
+    
     // Menu and toolbar
     QAction *m_refreshAction;
     QAction *m_settingsAction;
@@ -172,6 +183,7 @@ private:
     bool m_startMinimized;
     bool m_isLaunchingWallpaper; // Track when we're launching a new wallpaper
     LaunchSource m_lastLaunchSource; // Track the source of the last wallpaper launch
+    bool m_showHiddenWallpapers; // Track whether hidden wallpapers are shown
     
     // Main tab unsaved changes handling
     bool m_ignoreMainTabChange;

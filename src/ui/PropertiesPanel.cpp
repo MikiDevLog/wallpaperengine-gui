@@ -118,6 +118,8 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_subscriptionsLabel(new QLabel)
     , m_favoritesLabel(new QLabel)
     , m_previewLabel(new QLabel)
+    , m_previewIdLabel(nullptr)
+    , m_copyIdButton(nullptr)
     , m_descriptionEdit(new QTextEdit)
     , m_launchButton(new QPushButton("Launch Wallpaper"))
     , m_savePropertiesButton(new QPushButton("Save"))
@@ -161,10 +163,23 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_isWallpaperRunning(false)
     , m_ignoreTabChange(false)
     , m_userInteractingWithTabs(false)
+    , m_idSection(nullptr)
+    , m_steamSection(nullptr)
+    , m_regularEngineSection(nullptr)
+    , m_windowGeometryLabel(nullptr)
+    , m_windowGeometryWidget(nullptr)
+    , m_backgroundIdLabel(nullptr)
+    , m_backgroundIdWidget(nullptr)
+    , m_clampingLabel(nullptr)
+    , m_clampingWidget(nullptr)
+    , m_noAudioProcessingWidget(nullptr)
+    , m_innerTabWidget(nullptr)
 {
     setupUI();
-    // Connect copy button signal
-    connect(m_copyIdButton, &QPushButton::clicked, this, &PropertiesPanel::copyWallpaperIdToClipboard);
+    // Connect copy button signal - only if it was created
+    if (m_copyIdButton) {
+        connect(m_copyIdButton, &QPushButton::clicked, this, &PropertiesPanel::copyWallpaperIdToClipboard);
+    }
     // Connect signals for property changes
     connect(m_savePropertiesButton, &QPushButton::clicked, this, &PropertiesPanel::onSavePropertiesClicked);
     connect(m_resetPropertiesButton, &QPushButton::clicked, this, &PropertiesPanel::onResetPropertiesClicked);
@@ -700,6 +715,23 @@ void PropertiesPanel::setWallpaper(const WallpaperInfo& wallpaper)
     m_currentWallpaper = wallpaper;
     bool isExternalWallpaper = (wallpaper.type == "External");
     
+    // For external wallpapers, validate that the wallpaper still exists
+    if (isExternalWallpaper) {
+        QString filePath = getExternalWallpaperFilePath(wallpaper.id);
+        if (filePath.isEmpty()) {
+            // External wallpaper files are missing, show warning and clear panel
+            qCWarning(propertiesPanel) << "External wallpaper files missing for:" << wallpaper.id;
+            clear();
+            m_nameLabel->setText("External wallpaper not found");
+            m_nameLabel->setToolTip("The external wallpaper files are missing or corrupted");
+            m_authorLabel->setText("Local");
+            m_typeLabel->setText("External (Missing)");
+            m_descriptionEdit->setPlainText("This external wallpaper appears to be missing or corrupted. The wallpaper files may have been deleted or moved.");
+            setPlaceholderPreview("External wallpaper not found");
+            return;
+        }
+    }
+    
     // Update tab visibility based on wallpaper type
     if (isExternalWallpaper) {
         // For external wallpapers, show only Info and External Settings tabs
@@ -724,7 +756,7 @@ void PropertiesPanel::setWallpaper(const WallpaperInfo& wallpaper)
     if (isExternalWallpaper) {
         // For external wallpapers, show the file path instead of ID
         QString filePath = getExternalWallpaperFilePath(wallpaper.id);
-        m_previewIdLabel->setText(filePath.isEmpty() ? "Unknown file path" : filePath);
+        m_previewIdLabel->setText(filePath.isEmpty() ? "File path not available" : filePath);
         
         // Set author to "Local" for external wallpapers
         m_authorLabel->setText("Local");
@@ -2271,105 +2303,41 @@ void PropertiesPanel::copyWallpaperIdToClipboard()
 
 void PropertiesPanel::setupExternalWallpaperUI()
 {
+    qCDebug(propertiesPanel) << "setupExternalWallpaperUI called - using simplified version";
+    
+    // Safety check: ensure m_propertiesWidget exists
+    if (!m_propertiesWidget) {
+        qCWarning(propertiesPanel) << "setupExternalWallpaperUI: m_propertiesWidget is null";
+        return;
+    }
+    
+    // Use a very simple layout to avoid widget lifecycle issues
     auto* layout = new QVBoxLayout(m_propertiesWidget);
     layout->setContentsMargins(12, 12, 12, 12);
     layout->setSpacing(16);
     
-    // External wallpaper information section
-    auto* infoGroup = new QGroupBox("External Wallpaper Settings");
-    auto* infoLayout = new QFormLayout(infoGroup);
+    // Simple external wallpaper information section
+    auto* infoGroup = new QGroupBox("External Wallpaper");
+    auto* infoLayout = new QVBoxLayout(infoGroup);
     infoLayout->setContentsMargins(12, 16, 12, 12);
-    infoLayout->setVerticalSpacing(12);
-    infoLayout->setHorizontalSpacing(16);
-    infoLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    infoLayout->setSpacing(12);
     
-    // Wallpaper name editor
-    auto* nameLabel = new QLabel("Name:");
-    nameLabel->setStyleSheet("font-weight: bold;");
-    m_externalNameEdit->setMinimumHeight(28);
-    m_externalNameEdit->setText(m_currentWallpaper.name);
-    m_externalNameEdit->setPlaceholderText("Enter wallpaper name...");
+    QString infoText = QString(
+        "External wallpaper: %1\n\n"
+        "This is a custom media file launched using WNEL (wallpaper_not-engine_linux).\n"
+        "You can configure engine settings in the Engine Settings tab.\n\n"
+        "File path: %2"
+    ).arg(m_currentWallpaper.name).arg(m_currentWallpaper.path.isEmpty() ? m_currentWallpaper.id : m_currentWallpaper.path);
     
-    auto* nameLayout = new QHBoxLayout;
-    nameLayout->addWidget(m_externalNameEdit);
-    nameLayout->addWidget(m_saveExternalNameButton);
+    auto* infoLabel = new QLabel(infoText);
+    infoLabel->setWordWrap(true);
+    infoLabel->setStyleSheet("background: #f0f0f0; padding: 12px; border: 1px solid #ccc; border-radius: 4px;");
     
-    infoLayout->addRow(nameLabel, nameLayout);
-    
-    // File path display
-    auto* pathLabel = new QLabel("File Path:");
-    pathLabel->setStyleSheet("font-weight: bold;");
-    
-    // For external wallpapers, show the symlink path that points to the actual file
-    QString displayPath = m_currentWallpaper.path;
-    if (displayPath.isEmpty()) {
-        displayPath = m_currentWallpaper.id;
-    }
-    
-    auto* pathDisplayLabel = new QLabel(displayPath);
-    pathDisplayLabel->setWordWrap(true);
-    pathDisplayLabel->setStyleSheet("color: #666; font-style: italic;");
-    pathDisplayLabel->setMinimumHeight(28);
-    infoLayout->addRow(pathLabel, pathDisplayLabel);
-    
-    // File type display
-    auto* typeLabel = new QLabel("File Type:");
-    typeLabel->setStyleSheet("font-weight: bold;");
-    QString fileType = "Unknown";
-    
-    // Use the actual file path for external wallpapers, not the ID
-    QString filePath = m_currentWallpaper.path;
-    if (filePath.isEmpty()) {
-        filePath = m_currentWallpaper.id;
-    }
-    
-    if (filePath.endsWith(".mp4") || filePath.endsWith(".avi") || filePath.endsWith(".mkv") || filePath.endsWith(".mov")) {
-        fileType = "Video";
-    } else if (filePath.endsWith(".gif")) {
-        fileType = "Animated GIF";
-    } else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg") || filePath.endsWith(".png") || filePath.endsWith(".bmp")) {
-        fileType = "Image";
-    }
-    auto* typeDisplayLabel = new QLabel(fileType);
-    typeDisplayLabel->setMinimumHeight(28);
-    infoLayout->addRow(typeLabel, typeDisplayLabel);
-    
+    infoLayout->addWidget(infoLabel);
     layout->addWidget(infoGroup);
-    
-    // Usage instructions section
-    auto* usageGroup = new QGroupBox("Usage Information");
-    auto* usageLayout = new QVBoxLayout(usageGroup);
-    usageLayout->setContentsMargins(12, 16, 12, 12);
-    
-    auto* instructionsLabel = new QLabel(
-        "<p><b>External wallpapers</b> are custom media files (images, GIFs, or videos) "
-        "that are launched using the wallpaper_not-engine_linux (WNEL) addon.</p>"
-        "<p><b>Features available:</b></p>"
-        "<ul>"
-        "<li>Support for images (JPG, PNG, BMP)</li>"
-        "<li>Animated GIFs with proper frame timing</li>"
-        "<li>Video files (MP4, AVI, MKV, MOV)</li>"
-        "<li>Customizable engine settings on the Engine Settings tab</li>"
-        "</ul>"
-        "<p><b>Note:</b> Engine-specific settings like volume, scaling, and performance "
-        "options can be configured in the <i>Engine Settings</i> tab.</p>"
-    );
-    instructionsLabel->setWordWrap(true);
-    instructionsLabel->setStyleSheet("background: #f0f0f0; padding: 12px; border: 1px solid #ccc; border-radius: 4px;");
-    
-    usageLayout->addWidget(instructionsLabel);
-    layout->addWidget(usageGroup);
-    
     layout->addStretch();
     
-    // Connect signals for external wallpaper settings
-    connect(m_saveExternalNameButton, &QPushButton::clicked, this, &PropertiesPanel::onSaveExternalNameClicked);
-    connect(m_externalNameEdit, &QLineEdit::textChanged, this, [this]() {
-        m_saveExternalNameButton->setEnabled(m_externalNameEdit->text() != m_currentWallpaper.name);
-    });
-    
-    // Initially disable save button if name hasn't changed
-    m_saveExternalNameButton->setEnabled(false);
+    qCDebug(propertiesPanel) << "External wallpaper UI setup completed successfully";
 }
 
 void PropertiesPanel::updateWNELSettingsVisibility(bool isExternalWallpaper)
@@ -2495,7 +2463,7 @@ void PropertiesPanel::updateUIVisibilityForWallpaperType(bool isExternal)
         // Hide behavior settings group (not applicable to WNEL)
         QList<QGroupBox*> groups = engineTab->findChildren<QGroupBox*>();
         for (QGroupBox* group : groups) {
-            if (group->title() == "Behavior Settings") {
+            if (group && group->title() == "Behavior Settings") {
                 group->setVisible(!isExternal);
                 qCDebug(propertiesPanel) << "Behavior Settings group visibility set to:" << !isExternal;
                 break;
@@ -2508,24 +2476,62 @@ void PropertiesPanel::updateUIVisibilityForWallpaperType(bool isExternal)
 
 QString PropertiesPanel::getExternalWallpaperFilePath(const QString& wallpaperId)
 {
+    // Validate input
+    if (wallpaperId.isEmpty()) {
+        qCWarning(propertiesPanel) << "getExternalWallpaperFilePath: Empty wallpaper ID";
+        return QString();
+    }
+    
     // Read the project.json file for the external wallpaper to get the file path
-    QString configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-    QString externalDir = configDir + "/wallpaperengine-gui/external_wallpapers/" + wallpaperId;
+    // Use the configured external wallpapers path instead of hardcoded config location
+    ConfigManager& config = ConfigManager::instance();
+    QString externalWallpapersDir = config.externalWallpapersPath();
+    QString externalDir = externalWallpapersDir + "/" + wallpaperId;
     QString projectFile = externalDir + "/project.json";
     
+    qCDebug(propertiesPanel) << "Looking for external wallpaper in:" << externalDir;
+    
+    // Check if the directory and project file exist before trying to read
+    QDir dir(externalDir);
+    if (!dir.exists()) {
+        qCWarning(propertiesPanel) << "External wallpaper directory does not exist:" << externalDir;
+        return QString();
+    }
+    
     QFile file(projectFile);
+    if (!file.exists()) {
+        qCWarning(propertiesPanel) << "External wallpaper project.json does not exist:" << projectFile;
+        return QString();
+    }
+    
     if (!file.open(QIODevice::ReadOnly)) {
+        qCWarning(propertiesPanel) << "Failed to open external wallpaper project.json:" << projectFile;
         return QString();
     }
     
     QJsonParseError error;
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
     if (error.error != QJsonParseError::NoError) {
+        qCWarning(propertiesPanel) << "Failed to parse external wallpaper project.json:" << error.errorString();
         return QString();
     }
     
     QJsonObject project = doc.object();
-    QString filePath = project.value("file").toString();
+    QString filePath = project.value("originalPath").toString();
+    
+    // Fallback to relative file path if originalPath is not available
+    if (filePath.isEmpty()) {
+        QString relativeFile = project.value("file").toString();
+        if (!relativeFile.isEmpty()) {
+            filePath = externalDir + "/" + relativeFile;
+        }
+    }
+    
+    // Validate the file path exists
+    if (!filePath.isEmpty() && !QFile::exists(filePath)) {
+        qCWarning(propertiesPanel) << "External wallpaper original file does not exist:" << filePath;
+        // Don't return empty string, return the path anyway for display purposes
+    }
     
     // Return the original file path if available
     return filePath;

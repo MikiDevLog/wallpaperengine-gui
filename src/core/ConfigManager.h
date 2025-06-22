@@ -148,6 +148,10 @@ public:
     void setExternalWallpapersPath(const QString& path);
     QString wnelBinaryPath() const;
     void setWNELBinaryPath(const QString& path);
+    
+    // Generic settings access for custom configuration values
+    QVariant value(const QString& key, const QVariant& defaultValue = QVariant()) const;
+    void setValue(const QString& key, const QVariant& value);
 
 private:
     explicit ConfigManager(QObject* parent = nullptr);

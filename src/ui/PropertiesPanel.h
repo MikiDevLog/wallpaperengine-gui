@@ -80,6 +80,9 @@ public:
     void setWallpaperManager(WallpaperManager* manager);
     void clear();
     
+    // Getter for current wallpaper info
+    const WallpaperInfo& getCurrentWallpaper() const { return m_currentWallpaper; }
+    
     // Unsaved changes handling - made public for MainWindow access
     bool hasUnsavedChanges() const;
     bool showUnsavedChangesDialog();

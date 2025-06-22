@@ -1771,5 +1771,22 @@ void WallpaperPreview::calculateLayout()
     recalculateLayout();
 }
 
+// Hidden wallpapers support for Issue #9
+void WallpaperPreview::setShowHiddenWallpapers(bool show)
+{
+    qCDebug(wallpaperPreview) << "Setting show hidden wallpapers:" << show;
+    
+    // TODO: Implement proper hidden wallpapers filtering
+    // For now, this is a placeholder that just logs the request
+    // In a full implementation, this would:
+    // 1. Track which wallpapers are marked as hidden
+    // 2. Filter the displayed wallpapers based on this setting
+    // 3. Update the grid display accordingly
+    
+    // Since the hidden wallpapers functionality requires more complex implementation
+    // involving metadata tracking and filtering, for now we'll just acknowledge
+    // the request in the logs and the button state will be updated in MainWindow
+}
+
 // include the moc output for WallpaperPreview.h so staticMetaObject, vtables, signals, etc. are available
 #include "moc_WallpaperPreview.cpp"

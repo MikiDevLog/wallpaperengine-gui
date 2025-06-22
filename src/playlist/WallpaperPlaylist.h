@@ -66,6 +66,7 @@ public:
     void previousWallpaper();
     QString getCurrentWallpaperId() const;
     int getCurrentIndex() const;
+    bool isRunning() const;  // Check if playback is active
 
     // Individual wallpaper settings helper
     QStringList loadWallpaperSettings(const QString& wallpaperId) const;

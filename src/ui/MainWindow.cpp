@@ -20,6 +20,7 @@
 #include <QProgressBar>
 #include <QMessageBox>
 #include <QCloseEvent>
+#include <QFocusEvent>
 #include <QTimer>
 #include <QDesktopServices>
 #include <QUrl>
@@ -195,6 +196,9 @@ MainWindow::MainWindow(QWidget *parent)
     , m_addToPlaylistButton(nullptr)
     , m_removeFromPlaylistButton(nullptr)
     , m_addCustomWallpaperButton(nullptr)
+    , m_stopWallpaperButton(nullptr)
+    , m_deleteExternalButton(nullptr)
+    , m_toggleHiddenButton(nullptr)
     , m_refreshAction(nullptr)
     , m_settingsAction(nullptr)
     , m_aboutAction(nullptr)
@@ -211,6 +215,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_startMinimized(false)
     , m_isLaunchingWallpaper(false)
     , m_lastLaunchSource(LaunchSource::Manual)
+    , m_showHiddenWallpapers(false)
     , m_ignoreMainTabChange(false)
     , m_pendingPlaylistRestore(false)
     , m_pendingRestoreWallpaperId("")
@@ -405,9 +410,25 @@ void MainWindow::createCentralWidget()
     m_addCustomWallpaperButton = new QPushButton("Add Your Wallpaper");
     // Button is always enabled - it will check addon status when clicked
     
+    // New buttons for Issue #9 improvements
+    m_stopWallpaperButton = new QPushButton("Stop Wallpaper");
+    m_stopWallpaperButton->setEnabled(false);
+    m_stopWallpaperButton->setToolTip("Stop the currently running wallpaper");
+    
+    m_deleteExternalButton = new QPushButton("Delete External");
+    m_deleteExternalButton->setEnabled(false);
+    m_deleteExternalButton->setToolTip("Delete the selected external wallpaper and its files");
+    
+    m_toggleHiddenButton = new QPushButton("Show Hidden");
+    m_toggleHiddenButton->setCheckable(true);
+    m_toggleHiddenButton->setToolTip("Toggle visibility of hidden wallpapers");
+    
     playlistButtonsLayout->addWidget(m_addToPlaylistButton);
     playlistButtonsLayout->addWidget(m_removeFromPlaylistButton);
     playlistButtonsLayout->addWidget(m_addCustomWallpaperButton);
+    playlistButtonsLayout->addWidget(m_stopWallpaperButton);
+    playlistButtonsLayout->addWidget(m_deleteExternalButton);
+    playlistButtonsLayout->addWidget(m_toggleHiddenButton);
     playlistButtonsLayout->addStretch();
     
     leftLayout->addLayout(playlistButtonsLayout);
@@ -466,9 +487,24 @@ void MainWindow::createCentralWidget()
     connect(m_removeFromPlaylistButton, &QPushButton::clicked, this, &MainWindow::onRemoveFromPlaylistClicked);
     connect(m_addCustomWallpaperButton, &QPushButton::clicked, this, &MainWindow::onAddCustomWallpaperClicked);
     
+    // Connect new button signals for Issue #9
+    connect(m_stopWallpaperButton, &QPushButton::clicked, this, &MainWindow::onStopWallpaperClicked);
+    connect(m_deleteExternalButton, &QPushButton::clicked, this, &MainWindow::onDeleteExternalWallpaperClicked);
+    connect(m_toggleHiddenButton, &QPushButton::clicked, this, &MainWindow::onToggleHiddenWallpapersClicked);
+    
     // Connect playlist preview signals
     connect(m_playlistPreview, &PlaylistPreview::wallpaperSelected, this, &MainWindow::onPlaylistWallpaperSelected);
     connect(m_playlistPreview, &PlaylistPreview::removeFromPlaylistRequested, this, &MainWindow::onRemoveFromPlaylistRequested);
+
+    // Connect playlist signals to update button states when playlist starts/stops
+    connect(m_wallpaperPlaylist, &WallpaperPlaylist::playbackStarted, this, [this]() {
+        qCDebug(mainWindow) << "Playlist playback started - updating button states";
+        updatePlaylistButtonStates();
+    });
+    connect(m_wallpaperPlaylist, &WallpaperPlaylist::playbackStopped, this, [this]() {
+        qCDebug(mainWindow) << "Playlist playback stopped - updating button states";
+        updatePlaylistButtonStates();
+    });
 
     // preview → selection
     connect(m_wallpaperPreview, &WallpaperPreview::wallpaperSelected,
@@ -547,6 +583,15 @@ void MainWindow::loadSettings()
     
     // Restore splitter state
     m_splitter->restoreState(m_config.getSplitterState());
+    
+    // Load hidden wallpapers setting for Issue #9
+    m_showHiddenWallpapers = m_config.value("ui/showHiddenWallpapers", false).toBool();
+    if (m_toggleHiddenButton) {
+        m_toggleHiddenButton->setChecked(m_showHiddenWallpapers);
+        m_toggleHiddenButton->setText(m_showHiddenWallpapers ? "Hide Hidden" : "Show Hidden");
+        m_toggleHiddenButton->setToolTip(m_showHiddenWallpapers ? 
+            "Hide wallpapers marked as hidden" : "Show wallpapers marked as hidden");
+    }
 }
 
 void MainWindow::saveSettings()
@@ -608,6 +653,15 @@ void MainWindow::changeEvent(QEvent *event)
         }
     }
     QMainWindow::changeEvent(event);
+}
+
+void MainWindow::focusInEvent(QFocusEvent *event)
+{
+    // Update button states when the window gains focus
+    // This ensures the stop button reflects the current state when switching back to the application
+    qCDebug(mainWindow) << "MainWindow gained focus - updating button states";
+    updatePlaylistButtonStates();
+    QMainWindow::focusInEvent(event);
 }
 
 void MainWindow::setStartMinimized(bool minimized)
@@ -1133,6 +1187,31 @@ void MainWindow::onWallpaperSelected(const WallpaperInfo& wallpaper)
     try {
         if (!wallpaper.id.isEmpty()) {
             qCDebug(mainWindow) << "Setting wallpaper on properties panel";
+            
+            // For external wallpapers, validate they still exist before setting
+            if (wallpaper.type == "External") {
+                ConfigManager& config = ConfigManager::instance();
+                QString externalWallpapersDir = config.externalWallpapersPath();
+                QString externalDir = externalWallpapersDir + "/" + wallpaper.id;
+                if (!QDir(externalDir).exists()) {
+                    qCWarning(mainWindow) << "External wallpaper directory missing:" << externalDir;
+                    m_statusLabel->setText("Error: External wallpaper files missing");
+                    
+                    // Clear the preview and disable buttons
+                    m_wallpaperPreview->selectWallpaper("");
+                    m_addToPlaylistButton->setEnabled(false);
+                    m_removeFromPlaylistButton->setEnabled(false);
+                    
+                    // Show error message
+                    QMessageBox::warning(this, "Missing External Wallpaper", 
+                        QString("The external wallpaper '%1' files are missing.\n"
+                                "The wallpaper may have been deleted or moved.\n"
+                                "Please remove it from the playlist or re-add the wallpaper.")
+                        .arg(wallpaper.name));
+                    return;
+                }
+            }
+            
             m_propertiesPanel->setWallpaper(wallpaper);
             m_statusLabel->setText(QString("Selected: %1").arg(wallpaper.name));
             
@@ -1149,8 +1228,12 @@ void MainWindow::onWallpaperSelected(const WallpaperInfo& wallpaper)
         }
     } catch (const std::exception& e) {
         qCCritical(mainWindow) << "Exception in onWallpaperSelected:" << e.what();
+        m_statusLabel->setText("Error: Failed to select wallpaper");
+        m_propertiesPanel->clear();
     } catch (...) {
         qCCritical(mainWindow) << "Unknown exception in onWallpaperSelected";
+        m_statusLabel->setText("Error: Unknown error occurred");
+        m_propertiesPanel->clear();
     }
     
     qCDebug(mainWindow) << "onWallpaperSelected - END:" << wallpaper.name;
@@ -1722,6 +1805,26 @@ void MainWindow::updatePlaylistButtonStates()
     bool hasSelection = !selectedWallpaperId.isEmpty();
     bool isInPlaylist = hasSelection && m_wallpaperPlaylist->containsWallpaper(selectedWallpaperId);
     
+    // Check if any wallpaper is currently running
+    bool isWallpaperRunning = false;
+    if (m_wallpaperManager && m_wallpaperManager->isWallpaperRunning()) {
+        isWallpaperRunning = true;
+    }
+    if (m_wnelAddon && m_wnelAddon->isWallpaperRunning()) {
+        isWallpaperRunning = true;
+    }
+    // Also consider playlist running as "wallpaper running"
+    if (m_wallpaperPlaylist && m_wallpaperPlaylist->isRunning()) {
+        isWallpaperRunning = true;
+    }
+    
+    // Check if selected wallpaper is external
+    bool isExternalWallpaper = false;
+    if (hasSelection && m_propertiesPanel) {
+        WallpaperInfo currentWallpaper = m_propertiesPanel->getCurrentWallpaper();
+        isExternalWallpaper = (currentWallpaper.type == "External");
+    }
+    
     // Update the main playlist buttons using member variables
     if (m_addToPlaylistButton) {
         m_addToPlaylistButton->setEnabled(hasSelection && !isInPlaylist);
@@ -1731,6 +1834,15 @@ void MainWindow::updatePlaylistButtonStates()
     if (m_removeFromPlaylistButton) {
         m_removeFromPlaylistButton->setEnabled(hasSelection && isInPlaylist);
         m_removeFromPlaylistButton->setText(isInPlaylist ? "Remove from Playlist" : "Remove from Playlist");
+    }
+    
+    // Update new buttons for Issue #9
+    if (m_stopWallpaperButton) {
+        m_stopWallpaperButton->setEnabled(isWallpaperRunning);
+    }
+    
+    if (m_deleteExternalButton) {
+        m_deleteExternalButton->setEnabled(hasSelection && isExternalWallpaper);
     }
     
     // Update any menu actions if they exist
@@ -1829,4 +1941,134 @@ void MainWindow::onExternalWallpaperRemoved(const QString& wallpaperId)
     
     // Update status
     m_statusLabel->setText("External wallpaper removed");
+}
+
+// New button handlers for Issue #9 - Small improvements
+void MainWindow::onStopWallpaperClicked()
+{
+    qCDebug(mainWindow) << "Stop wallpaper button clicked";
+    
+    bool stoppedSomething = false;
+    QStringList stoppedItems;
+    
+    // Stop both regular and external wallpapers
+    if (m_wallpaperManager && m_wallpaperManager->isWallpaperRunning()) {
+        m_wallpaperManager->stopWallpaper();
+        stoppedItems << "wallpaper";
+        stoppedSomething = true;
+    }
+    
+    if (m_wnelAddon && m_wnelAddon->isWallpaperRunning()) {
+        m_wnelAddon->stopWallpaper();
+        if (!stoppedItems.contains("wallpaper")) {
+            stoppedItems << "external wallpaper";
+        }
+        stoppedSomething = true;
+    }
+    
+    // Stop playlist if running
+    if (m_wallpaperPlaylist && m_wallpaperPlaylist->isRunning()) {
+        m_wallpaperPlaylist->stopPlayback();
+        stoppedItems << "playlist";
+        stoppedSomething = true;
+    }
+    
+    // Update status message based on what was stopped
+    if (stoppedSomething) {
+        m_statusLabel->setText(QString("Stopped: %1").arg(stoppedItems.join(", ")));
+    } else {
+        m_statusLabel->setText("Nothing was running to stop");
+    }
+    
+    // Update button states
+    updatePlaylistButtonStates();
+}
+
+void MainWindow::onDeleteExternalWallpaperClicked()
+{
+    qCDebug(mainWindow) << "Delete external wallpaper button clicked";
+    
+    // Get currently selected wallpaper
+    if (m_currentWallpaperId.isEmpty()) {
+        QMessageBox::information(this, "No Selection", "Please select an external wallpaper to delete.");
+        return;
+    }
+    
+    // Check if the selected wallpaper is external
+    if (m_propertiesPanel) {
+        WallpaperInfo currentWallpaper = m_propertiesPanel->getCurrentWallpaper();
+        if (currentWallpaper.type != "External") {
+            QMessageBox::information(this, "Invalid Selection", 
+                "Only external wallpapers can be deleted. Please select an external wallpaper.");
+            return;
+        }
+        
+        // Confirm deletion
+        QMessageBox::StandardButton reply = QMessageBox::question(this, 
+            "Delete External Wallpaper",
+            QString("Are you sure you want to delete the external wallpaper '%1'?\n\n"
+                    "This will permanently remove:\n"
+                    "• The wallpaper from your collection\n"
+                    "• All associated files and settings\n"
+                    "• The wallpaper from any playlists\n\n"
+                    "The original media file will not be deleted.")
+            .arg(currentWallpaper.name),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        
+        if (reply != QMessageBox::Yes) {
+            return;
+        }
+        
+        // Remove from wallpaper manager addon
+        if (m_wnelAddon && m_wnelAddon->removeExternalWallpaper(m_currentWallpaperId)) {
+            // Remove from playlist if present
+            if (m_wallpaperPlaylist) {
+                m_wallpaperPlaylist->removeWallpaper(m_currentWallpaperId);
+            }
+            
+            // Clear the properties panel
+            m_propertiesPanel->clear();
+            m_currentWallpaperId.clear();
+            
+            // Update button states
+            updatePlaylistButtonStates();
+            
+            m_statusLabel->setText(QString("External wallpaper '%1' deleted successfully")
+                                   .arg(currentWallpaper.name));
+            
+            QMessageBox::information(this, "Success", 
+                QString("External wallpaper '%1' has been deleted successfully.")
+                .arg(currentWallpaper.name));
+        } else {
+            QMessageBox::warning(this, "Error", 
+                "Failed to delete the external wallpaper. Check the log for details.");
+        }
+    }
+}
+
+void MainWindow::onToggleHiddenWallpapersClicked()
+{
+    qCDebug(mainWindow) << "Toggle hidden wallpapers button clicked";
+    
+    m_showHiddenWallpapers = !m_showHiddenWallpapers;
+    
+    // Update button text and state
+    if (m_showHiddenWallpapers) {
+        m_toggleHiddenButton->setText("Hide Hidden");
+        m_toggleHiddenButton->setToolTip("Hide wallpapers marked as hidden");
+        m_statusLabel->setText("Showing hidden wallpapers");
+    } else {
+        m_toggleHiddenButton->setText("Show Hidden");
+        m_toggleHiddenButton->setToolTip("Show wallpapers marked as hidden");
+        m_statusLabel->setText("Hiding hidden wallpapers");
+    }
+    
+    // Apply filter to wallpaper preview
+    if (m_wallpaperPreview) {
+        m_wallpaperPreview->setShowHiddenWallpapers(m_showHiddenWallpapers);
+    }
+    
+    // Save the setting to config
+    m_config.setValue("ui/showHiddenWallpapers", m_showHiddenWallpapers);
 }

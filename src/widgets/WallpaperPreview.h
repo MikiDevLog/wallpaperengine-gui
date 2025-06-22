@@ -151,6 +151,9 @@ public:
     void selectWallpaper(const QString& wallpaperId);
     void updateTheme();
     
+    // Hidden wallpapers support for Issue #9
+    void setShowHiddenWallpapers(bool show);
+    
     WallpaperInfo getSelectedWallpaper() const;
     QString getSelectedWallpaperId() const;
 

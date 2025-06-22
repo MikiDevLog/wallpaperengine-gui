@@ -319,6 +319,11 @@ int WallpaperPlaylist::getCurrentIndex() const
     return m_currentIndex;
 }
 
+bool WallpaperPlaylist::isRunning() const
+{
+    return m_playbackTimer && m_playbackTimer->isActive();
+}
+
 QStringList WallpaperPlaylist::loadWallpaperSettings(const QString& wallpaperId) const
 {
     QStringList args;

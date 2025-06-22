@@ -655,3 +655,15 @@ void ConfigManager::setWNELBinaryPath(const QString& path)
     m_settings->setValue("wnel/binary_path", path);
     m_settings->sync();
 }
+
+// Generic settings access for custom configuration values
+QVariant ConfigManager::value(const QString& key, const QVariant& defaultValue) const
+{
+    return m_settings->value(key, defaultValue);
+}
+
+void ConfigManager::setValue(const QString& key, const QVariant& value)
+{
+    m_settings->setValue(key, value);
+    m_settings->sync();
+}
