@@ -30,7 +30,7 @@ In short - will allow to run regular media files in full compatibility with regu
 ## Prerequisites
 
 [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine)
-You need binary (~/build/output/linux-wallpaperengine) compiled and placed anywhere you want (After compilation, you can delete the local repository if you want, just remember to keep the binary.). Go to link above for the instructions. **And make sure you are using the correct DE and composer and installed all dependencies from his instruction pls tm.**
+You need binary (~/build/output/linux-wallpaperengine) compiled. Go to link above for the instructions. **And make sure you are using the correct DE and composer and installed all dependencies from his instruction pls tm.**
 
 ### Fedora / RHEL / CentOS
 ```bash
