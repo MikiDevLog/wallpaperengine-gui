@@ -250,6 +250,11 @@ MainWindow::~MainWindow()
         m_wallpaperManager->stopWallpaper();
     }
     
+    // Stop any running external wallpapers
+    if (m_wnelAddon) {
+        m_wnelAddon->stopWallpaper();
+    }
+    
     // Hide and cleanup system tray icon
     if (m_systemTrayIcon) {
         m_systemTrayIcon->hide();
@@ -639,6 +644,17 @@ void MainWindow::closeEvent(QCloseEvent *event)
     
     // Normal application exit
     m_isClosing = true;
+    
+    // Stop any running wallpapers before closing
+    if (m_wallpaperManager) {
+        m_wallpaperManager->stopWallpaper();
+    }
+    
+    // Stop any running external wallpapers before closing
+    if (m_wnelAddon) {
+        m_wnelAddon->stopWallpaper();
+    }
+    
     saveSettings();
     event->accept();
 }
@@ -867,6 +883,11 @@ void MainWindow::quitApplication()
     // Stop any running wallpapers
     if (m_wallpaperManager) {
         m_wallpaperManager->stopWallpaper();
+    }
+    
+    // Stop any running external wallpapers
+    if (m_wnelAddon) {
+        m_wnelAddon->stopWallpaper();
     }
     
     // Hide tray icon before quitting
