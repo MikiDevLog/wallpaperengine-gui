@@ -113,6 +113,7 @@ private slots:
     void onStopWallpaperClicked();
     void onDeleteExternalWallpaperClicked();
     void onToggleHiddenWallpapersClicked();
+    void onWallpaperHiddenToggled(const WallpaperInfo& wallpaper, bool hidden);
 
 private:
     void setupUI();

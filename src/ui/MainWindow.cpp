@@ -518,7 +518,9 @@ void MainWindow::createCentralWidget()
             this, [this](const WallpaperInfo& wallpaper) {
                 launchWallpaperWithSource(wallpaper, LaunchSource::Manual);
             });
-
+    connect(m_wallpaperPreview, &WallpaperPreview::wallpaperHiddenToggled,
+            this, &MainWindow::onWallpaperHiddenToggled);
+    
     // properties panel → launch
     connect(m_propertiesPanel, &PropertiesPanel::launchWallpaper,
             this, [this](const WallpaperInfo& wallpaper) {
@@ -1249,6 +1251,9 @@ void MainWindow::onWallpaperSelected(const WallpaperInfo& wallpaper)
         if (!wallpaper.id.isEmpty()) {
             qCDebug(mainWindow) << "Setting wallpaper on properties panel";
             
+            // Set the current wallpaper ID for button states and operations
+            m_currentWallpaperId = wallpaper.id;
+            
             // For external wallpapers, validate they still exist before setting
             if (wallpaper.type == "External") {
                 ConfigManager& config = ConfigManager::instance();
@@ -1262,6 +1267,7 @@ void MainWindow::onWallpaperSelected(const WallpaperInfo& wallpaper)
                     m_wallpaperPreview->selectWallpaper("");
                     m_addToPlaylistButton->setEnabled(false);
                     m_removeFromPlaylistButton->setEnabled(false);
+                    m_currentWallpaperId.clear();
                     
                     // Show error message
                     QMessageBox::warning(this, "Missing External Wallpaper", 
@@ -1282,6 +1288,7 @@ void MainWindow::onWallpaperSelected(const WallpaperInfo& wallpaper)
             qCDebug(mainWindow) << "Clearing properties panel";
             m_propertiesPanel->clear();
             m_statusLabel->setText("Ready");
+            m_currentWallpaperId.clear();
             
             // Disable playlist buttons when no wallpaper is selected
             m_addToPlaylistButton->setEnabled(false);
@@ -2132,4 +2139,36 @@ void MainWindow::onToggleHiddenWallpapersClicked()
     
     // Save the setting to config
     m_config.setValue("ui/showHiddenWallpapers", m_showHiddenWallpapers);
+}
+
+void MainWindow::onWallpaperHiddenToggled(const WallpaperInfo& wallpaper, bool hidden)
+{
+    qCDebug(mainWindow) << "Wallpaper hidden status toggled:" << wallpaper.name << "hidden:" << hidden;
+    
+    // Show status message
+    if (hidden) {
+        m_statusLabel->setText(QString("Wallpaper '%1' marked as hidden").arg(wallpaper.name));
+        
+        // If we're showing all wallpapers including hidden ones, inform user
+        if (m_showHiddenWallpapers) {
+            m_statusLabel->setText(QString("Wallpaper '%1' marked as hidden (still visible because 'Show Hidden' is enabled)").arg(wallpaper.name));
+        }
+    } else {
+        m_statusLabel->setText(QString("Wallpaper '%1' marked as visible").arg(wallpaper.name));
+    }
+    
+    // If the wallpaper is in a playlist and was just hidden, optionally ask user if they want to remove it
+    if (hidden && m_wallpaperPlaylist && m_wallpaperPlaylist->containsWallpaper(wallpaper.id)) {
+        QMessageBox::StandardButton reply = QMessageBox::question(this,
+            "Remove from Playlist?",
+            QString("The wallpaper '%1' has been marked as hidden.\n\n"
+                    "Do you want to also remove it from the playlist?").arg(wallpaper.name),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        
+        if (reply == QMessageBox::Yes) {
+            m_wallpaperPlaylist->removeWallpaper(wallpaper.id);
+            m_statusLabel->setText(QString("Wallpaper '%1' hidden and removed from playlist").arg(wallpaper.name));
+        }
+    }
 }

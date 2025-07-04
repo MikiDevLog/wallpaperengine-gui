@@ -1053,6 +1053,38 @@ void WallpaperPreviewItem::tryLoadFromSteamCache()
     }
 }
 
+void WallpaperPreviewItem::contextMenuEvent(QContextMenuEvent* event)
+{
+    QMenu contextMenu(this);
+    
+    // Check if this wallpaper is hidden
+    bool isHidden = false;
+    
+    // Find the WallpaperPreview parent by traversing up the widget hierarchy
+    QWidget* current = this;
+    WallpaperPreview* preview = nullptr;
+    while (current && !preview) {
+        current = current->parentWidget();
+        preview = qobject_cast<WallpaperPreview*>(current);
+    }
+    
+    if (preview) {
+        isHidden = preview->isWallpaperHidden(m_wallpaper.id);
+    }
+    
+    // Add toggle hidden action
+    QAction* toggleHiddenAction = contextMenu.addAction(
+        isHidden ? "Show Wallpaper" : "Hide Wallpaper"
+    );
+    toggleHiddenAction->setIcon(QIcon(isHidden ? ":/icons/icons/show.png" : ":/icons/icons/hide.png"));
+    
+    // Execute the menu and handle the result
+    QAction* selectedAction = contextMenu.exec(event->globalPos());
+    if (selectedAction == toggleHiddenAction) {
+        emit toggleHiddenRequested(m_wallpaper, !isHidden);
+    }
+}
+
 // WallpaperPreview implementation
 WallpaperPreview::WallpaperPreview(QWidget* parent)
     : QWidget(parent)
@@ -1078,8 +1110,12 @@ WallpaperPreview::WallpaperPreview(QWidget* parent)
     , m_currentItemsPerRow(PREFERRED_ITEMS_PER_ROW)
     , m_lastContainerWidth(0)
     , m_layoutUpdatePending(false)
+    , m_showHiddenWallpapers(false)
 {
     setupUI();
+    
+    // Load hidden wallpapers from settings
+    loadHiddenWallpapers();
     
     connect(m_workshopLoadTimer, &QTimer::timeout, this, &WallpaperPreview::loadWorkshopDataBatch);
     m_workshopLoadTimer->setSingleShot(false);
@@ -1267,7 +1303,11 @@ QList<WallpaperInfo> WallpaperPreview::getFilteredWallpapers() const
         bool matchesFilter = (filterType == "All Types") || 
                            (wallpaper.type.compare(filterType, Qt::CaseInsensitive) == 0);
         
-        if (matchesSearch && matchesFilter) {
+        // Check hidden status filter
+        bool isHidden = m_hiddenWallpapers.contains(wallpaper.id);
+        bool matchesHiddenFilter = m_showHiddenWallpapers || !isHidden;
+        
+        if (matchesSearch && matchesFilter && matchesHiddenFilter) {
             filtered.append(wallpaper);
         }
     }
@@ -1315,6 +1355,8 @@ void WallpaperPreview::loadCurrentPage()
                 this, &WallpaperPreview::onWallpaperItemClicked);
         connect(item, &WallpaperPreviewItem::doubleClicked, 
                 this, &WallpaperPreview::onWallpaperItemDoubleClicked);
+        connect(item, &WallpaperPreviewItem::toggleHiddenRequested,
+                this, &WallpaperPreview::toggleWallpaperHidden);
         
         m_gridLayout->addWidget(item, row, col);
         m_currentPageItems.append(item);
@@ -1776,16 +1818,14 @@ void WallpaperPreview::setShowHiddenWallpapers(bool show)
 {
     qCDebug(wallpaperPreview) << "Setting show hidden wallpapers:" << show;
     
-    // TODO: Implement proper hidden wallpapers filtering
-    // For now, this is a placeholder that just logs the request
-    // In a full implementation, this would:
-    // 1. Track which wallpapers are marked as hidden
-    // 2. Filter the displayed wallpapers based on this setting
-    // 3. Update the grid display accordingly
+    if (m_showHiddenWallpapers == show) {
+        return; // No change needed
+    }
     
-    // Since the hidden wallpapers functionality requires more complex implementation
-    // involving metadata tracking and filtering, for now we'll just acknowledge
-    // the request in the logs and the button state will be updated in MainWindow
+    m_showHiddenWallpapers = show;
+    
+    // Refresh the wallpaper grid to apply the new filter
+    updateWallpaperGrid();
 }
 
 void WallpaperPreview::stopAllPreviewAnimations()
@@ -1823,6 +1863,57 @@ void WallpaperPreview::startAllPreviewAnimations()
             }
         }
     }
+}
+
+void WallpaperPreview::toggleWallpaperHidden(const WallpaperInfo& wallpaper, bool hidden)
+{
+    qCDebug(wallpaperPreview) << "Toggling wallpaper hidden status:" << wallpaper.id << "hidden:" << hidden;
+    
+    if (hidden) {
+        m_hiddenWallpapers.insert(wallpaper.id);
+    } else {
+        m_hiddenWallpapers.remove(wallpaper.id);
+    }
+    
+    // Save the updated hidden wallpapers list
+    saveHiddenWallpapers();
+    
+    // Emit signal for MainWindow to handle
+    emit wallpaperHiddenToggled(wallpaper, hidden);
+    
+    // Refresh the grid if we're not showing hidden wallpapers and this wallpaper was just hidden
+    if (!m_showHiddenWallpapers && hidden) {
+        updateWallpaperGrid();
+    }
+}
+
+bool WallpaperPreview::isWallpaperHidden(const QString& wallpaperId) const
+{
+    return m_hiddenWallpapers.contains(wallpaperId);
+}
+
+void WallpaperPreview::loadHiddenWallpapers()
+{
+    // Load hidden wallpapers from config
+    ConfigManager& config = ConfigManager::instance();
+    QStringList hiddenList = config.value("ui/hiddenWallpapers", QStringList()).toStringList();
+    
+    m_hiddenWallpapers.clear();
+    for (const QString& wallpaperId : hiddenList) {
+        m_hiddenWallpapers.insert(wallpaperId);
+    }
+    
+    qCDebug(wallpaperPreview) << "Loaded" << m_hiddenWallpapers.size() << "hidden wallpapers from config";
+}
+
+void WallpaperPreview::saveHiddenWallpapers()
+{
+    // Save hidden wallpapers to config
+    ConfigManager& config = ConfigManager::instance();
+    QStringList hiddenList = m_hiddenWallpapers.values();
+    config.setValue("ui/hiddenWallpapers", hiddenList);
+    
+    qCDebug(wallpaperPreview) << "Saved" << m_hiddenWallpapers.size() << "hidden wallpapers to config";
 }
 
 // include the moc output for WallpaperPreview.h so staticMetaObject, vtables, signals, etc. are available

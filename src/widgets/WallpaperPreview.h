@@ -28,6 +28,10 @@
 #include <QPainter>
 #include <QDrag>
 #include <QMimeData>
+#include <QMenu>
+#include <QAction>
+#include <QContextMenuEvent>
+#include <QSet>
 #include "../core/WallpaperManager.h"
 
 Q_DECLARE_LOGGING_CATEGORY(wallpaperPreview)
@@ -76,6 +80,7 @@ public:
 signals:
     void clicked(const WallpaperInfo& wallpaper);
     void doubleClicked(const WallpaperInfo& wallpaper);
+    void toggleHiddenRequested(const WallpaperInfo& wallpaper, bool hidden);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -83,6 +88,7 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
 
 private:
     void setupUI();
@@ -113,6 +119,12 @@ private:
     void parseWorkshopDataFromFilesystem();
     void tryLoadFromSteamCache();
     QString findWorkshopIdInSteamLibraries();
+    
+    // Context menu actions
+    void showContextMenu(const QPoint& pos);
+    void addToFavorites();
+    void removeFromFavorites();
+    void openInBrowser();
     
 public slots:
     void loadWorkshopDataDeferred();
@@ -153,6 +165,8 @@ public:
     
     // Hidden wallpapers support for Issue #9
     void setShowHiddenWallpapers(bool show);
+    void toggleWallpaperHidden(const WallpaperInfo& wallpaper, bool hidden);
+    bool isWallpaperHidden(const QString& wallpaperId) const;
     
     WallpaperInfo getSelectedWallpaper() const;
     QString getSelectedWallpaperId() const;
@@ -178,6 +192,7 @@ public:
 signals:
     void wallpaperSelected(const WallpaperInfo& wallpaper);
     void wallpaperDoubleClicked(const WallpaperInfo& wallpaper);
+    void wallpaperHiddenToggled(const WallpaperInfo& wallpaper, bool hidden);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -259,6 +274,14 @@ private:
     int m_currentItemsPerRow;
     int m_lastContainerWidth;
     bool m_layoutUpdatePending;
+    
+    // Hidden wallpapers tracking
+    QSet<QString> m_hiddenWallpapers;
+    bool m_showHiddenWallpapers;
+    
+    // Helper methods
+    void loadHiddenWallpapers();
+    void saveHiddenWallpapers();
 
     // Add helper method to safely cancel all pending operations
     void cancelAllPendingOperations();
