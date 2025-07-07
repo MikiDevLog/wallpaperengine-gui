@@ -39,6 +39,8 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QCheckBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
