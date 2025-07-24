@@ -62,7 +62,7 @@ sudo pacman -S qt6-base qt6-webengine qt6-multimedia
 
 #### Build Steps
 ```bash
-git clone https://github.com/yourusername/wallpaperengine-gui.git
+git clone https://github.com/MikiDevLog/wallpaperengine-gui.git
 cd wallpaperengine-gui
 mkdir build && cd build
 cmake ..
