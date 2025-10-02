@@ -116,7 +116,7 @@ install(TARGETS wallpaperengine-gui
 )
 
 # Desktop file
-set(ICON_INSTALL_DIR "share/pixmaps")
+set(ICON_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/share/pixmaps")
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/desktop/wallpaperengine-gui.desktop.in
     ${CMAKE_CURRENT_BINARY_DIR}/wallpaperengine-gui.desktop
