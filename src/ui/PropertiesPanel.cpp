@@ -400,9 +400,21 @@ void PropertiesPanel::setupUI()
        m_scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
        // removed fixed min/max height to allow full expansion
        m_scrollArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+       
+       // Fix ghosting/transparency issues
+       m_scrollArea->setFrameShape(QFrame::NoFrame);
+       m_scrollArea->setAutoFillBackground(true);
+       QPalette pal = m_scrollArea->palette();
+       pal.setColor(QPalette::Window, palette().color(QPalette::Base));
+       m_scrollArea->setPalette(pal);
 
        // Create placeholder widget for properties
        m_propertiesWidget = new QWidget;
+       m_propertiesWidget->setAutoFillBackground(true); // Ensure proper background painting
+       QPalette widgetPal = m_propertiesWidget->palette();
+       widgetPal.setColor(QPalette::Window, palette().color(QPalette::Base));
+       m_propertiesWidget->setPalette(widgetPal);
+       
        auto* propsFormLayout = new QVBoxLayout(m_propertiesWidget);
        propsFormLayout->setContentsMargins(8, 8, 8, 8);
        propsFormLayout->addWidget(new QLabel("Select a wallpaper to view properties"));
