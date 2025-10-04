@@ -1386,13 +1386,21 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
                     QString windowGeometry = settings["windowGeometry"].toString();
                     if (!windowGeometry.isEmpty()) additionalArgs << "--window" << windowGeometry;
                     
+                    // Handle screen root settings, check custom override first
+                    QString customScreenRoot = settings["customScreenRoot"].toString();
                     QString screenRoot = settings["screenRoot"].toString();
-                    if (!screenRoot.isEmpty()) {
-                        additionalArgs << "--screen-root" << screenRoot;
-                        
-                        QString backgroundId = settings["backgroundId"].toString();
-                        if (!backgroundId.isEmpty()) additionalArgs << "--bg" << backgroundId;
+                    QString effectiveScreen = customScreenRoot.isEmpty() ? screenRoot : customScreenRoot;
+                    
+                    if (!effectiveScreen.isEmpty()) {
+                        if (wallpaper.type == "External") {
+                            additionalArgs << "--output" << effectiveScreen;
+                        } else {
+                            additionalArgs << "--screen-root" << effectiveScreen;
+                        }
                     }
+                    
+                    QString backgroundId = settings["backgroundId"].toString();
+                    if (!backgroundId.isEmpty()) additionalArgs << "--bg" << backgroundId;
                     
                     QString scaling = settings["scaling"].toString();
                     if (scaling != "default") additionalArgs << "--scaling" << scaling;
@@ -1414,8 +1422,12 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
                 // FPS default is 30 - apply it explicitly  
                 additionalArgs << "--fps" << "30";
                 
-                // Screen root default is HDMI-A-1 - apply it explicitly
-                additionalArgs << "--screen-root" << "HDMI-A-1";
+                // Screen root handling based on wallpaper type
+                if (wallpaper.type == "External") {
+                    additionalArgs << "--output" << "HDMI-A-1";
+                } else {
+                    additionalArgs << "--screen-root" << "HDMI-A-1";
+                }
                 
                 // Other defaults (silent=false, scaling=default, clamping=clamp) don't need explicit args
                 // as they are the wallpaper engine's own defaults

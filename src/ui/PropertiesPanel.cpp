@@ -36,7 +36,7 @@
 Q_LOGGING_CATEGORY(propertiesPanel, "app.propertiespanel")
 
 // Implementation of WallpaperSettings::toCommandLineArgs()
-QStringList WallpaperSettings::toCommandLineArgs() const
+QStringList WallpaperSettings::toCommandLineArgs(bool isExternalWallpaper) const
 {
     QStringList args;
     
@@ -60,9 +60,14 @@ QStringList WallpaperSettings::toCommandLineArgs() const
     if (fps != 30) { // Only add if different from default
         args << "--fps" << QString::number(fps);
     }
-     // Display settings - Use WNEL's --output flag instead of --screen-root
-    if (!screenRoot.isEmpty()) {
-        args << "--output" << screenRoot;
+     // Display settings - Use different flags for WNEL vs wallpaper engine
+    if (!customScreenRoot.isEmpty() || !screenRoot.isEmpty()) {
+        QString screenValue = !customScreenRoot.isEmpty() ? customScreenRoot : screenRoot;
+        if (isExternalWallpaper) {
+            args << "--output" << screenValue;  // WNEL uses --output
+        } else {
+            args << "--screen-root" << screenValue;  // wallpaper engine uses --screen-root
+        }
     }
 
     if (scaling != "default") {
@@ -136,6 +141,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_fpsSpinBox(new QSpinBox)
     , m_windowGeometryEdit(new QLineEdit)
     , m_screenRootCombo(new QComboBox)
+    , m_customScreenRootEdit(new QLineEdit)
     , m_backgroundIdEdit(new QLineEdit)
     , m_scalingCombo(new QComboBox)
     , m_clampingCombo(new QComboBox)
@@ -566,6 +572,18 @@ void PropertiesPanel::setupSettingsUI(QWidget* settingsTab)
     m_screenRootCombo->addItems(screens);
     displayLayout->addRow(createDisplayLabel("Screen Root:"), m_screenRootCombo);
     
+    // Custom screen root override
+    m_customScreenRootEdit = new QLineEdit(this);
+    m_customScreenRootEdit->setPlaceholderText("Custom screen (overrides selection above)");
+    m_customScreenRootEdit->setMinimumWidth(200);
+    m_customScreenRootEdit->setMinimumHeight(28);
+    connect(m_customScreenRootEdit, &QLineEdit::textChanged, this, [this](const QString& text) {
+        m_screenRootCombo->setEnabled(text.isEmpty());
+        m_currentSettings.customScreenRoot = text;  // Update the setting immediately
+        onSettingChanged();  // Trigger settings update
+    });
+    displayLayout->addRow(createDisplayLabel("Custom Screen:"), m_customScreenRootEdit);
+
     // Background ID - not supported by WNEL, will be hidden for external wallpapers
     m_backgroundIdEdit->setPlaceholderText("Background ID");
     m_backgroundIdEdit->setMinimumWidth(200);
@@ -1205,7 +1223,13 @@ void PropertiesPanel::onSettingChanged()
     m_currentSettings.noAudioProcessing = m_noAudioProcessingCheckBox->isChecked();
     m_currentSettings.fps = m_fpsSpinBox->value();
     m_currentSettings.windowGeometry = m_windowGeometryEdit->text();
-    m_currentSettings.screenRoot = m_screenRootCombo->currentText() == "Default" ? "" : m_screenRootCombo->currentText();
+    QString selectedScreen = m_screenRootCombo->currentText();
+    // Strip out the resolution info if present
+    if (selectedScreen.contains("(")) {
+        selectedScreen = selectedScreen.left(selectedScreen.indexOf("(")).trimmed();
+    }
+    m_currentSettings.screenRoot = selectedScreen == "Default" ? "" : selectedScreen;
+    m_currentSettings.customScreenRoot = m_customScreenRootEdit->text();
     m_currentSettings.backgroundId = m_backgroundIdEdit->text();
     m_currentSettings.scaling = m_scalingCombo->currentText();
     m_currentSettings.clamping = m_clampingCombo->currentText();
@@ -1226,7 +1250,8 @@ void PropertiesPanel::onSettingChanged()
     m_saveSettingsButton->setEnabled(true);
     
     // Emit signal to notify that settings have changed
-    emit settingsChanged(m_currentWallpaper.id, m_currentSettings);
+    bool isExternalWallpaper = (m_currentWallpaper.type == "External");
+    emit settingsChanged(m_currentWallpaper.id, m_currentSettings, isExternalWallpaper);
 }
 
 void PropertiesPanel::onSaveSettingsClicked()
@@ -1342,6 +1367,7 @@ bool PropertiesPanel::saveWallpaperSettings(const QString& wallpaperId)
     settingsObj["fps"] = m_currentSettings.fps;
     settingsObj["windowGeometry"] = m_currentSettings.windowGeometry;
     settingsObj["screenRoot"] = m_currentSettings.screenRoot;
+    settingsObj["customScreenRoot"] = m_currentSettings.customScreenRoot;
     settingsObj["backgroundId"] = m_currentSettings.backgroundId;
     settingsObj["scaling"] = m_currentSettings.scaling;
     settingsObj["clamping"] = m_currentSettings.clamping;
@@ -1390,6 +1416,7 @@ bool PropertiesPanel::loadWallpaperSettings(const QString& wallpaperId)
     m_currentSettings.fps = obj["fps"].toInt(30);
     m_currentSettings.windowGeometry = obj["windowGeometry"].toString();
     m_currentSettings.screenRoot = obj["screenRoot"].toString();
+    m_currentSettings.customScreenRoot = obj["customScreenRoot"].toString();
     m_currentSettings.backgroundId = obj["backgroundId"].toString();
     m_currentSettings.scaling = obj["scaling"].toString("default");
     m_currentSettings.clamping = obj["clamping"].toString("clamp");
@@ -1419,10 +1446,40 @@ QString PropertiesPanel::getSettingsFilePath(const QString& wallpaperId)
 QStringList PropertiesPanel::getAvailableScreens() const
 {
     QStringList screens;
-    // Add available screen identifiers
-    for (auto screen : qApp->screens()) {
-        screens << screen->name();
+    screens << "Default";  // Always add Default option first
+
+    // Get primary screen info
+    QScreen* primaryScreen = qApp->primaryScreen();
+    if (primaryScreen) {
+        QString primaryName = primaryScreen->name();
+        QString primaryInfo = QString("%1 (Primary - %2x%3)")
+            .arg(primaryName)
+            .arg(primaryScreen->geometry().width())
+            .arg(primaryScreen->geometry().height());
+        screens << primaryName;  // Add raw name for compatibility
+        screens << primaryInfo;  // Add descriptive version
     }
+
+    // Add other screens with resolution info
+    for (auto screen : qApp->screens()) {
+        if (screen != primaryScreen) {  // Skip primary screen as it's already added
+            QString screenName = screen->name();
+            QString screenInfo = QString("%1 (%2x%3)")
+                .arg(screenName)
+                .arg(screen->geometry().width())
+                .arg(screen->geometry().height());
+            screens << screenName;  // Add raw name for compatibility
+            screens << screenInfo;  // Add descriptive version
+        }
+    }
+
+    // Add common fallback names that wallpaper-engine might expect
+    if (!screens.contains("HDMI-A-1")) screens << "HDMI-A-1";
+    if (!screens.contains("HDMI-1")) screens << "HDMI-1";
+    if (!screens.contains("DP-1")) screens << "DP-1";
+    if (!screens.contains("eDP-1")) screens << "eDP-1";
+
+    qCDebug(propertiesPanel) << "Available screens:" << screens;
     return screens;
 }
 
@@ -1436,6 +1493,7 @@ void PropertiesPanel::updateSettingsControls()
     m_fpsSpinBox->blockSignals(true);
     m_windowGeometryEdit->blockSignals(true);
     m_screenRootCombo->blockSignals(true);
+    m_customScreenRootEdit->blockSignals(true);
     m_backgroundIdEdit->blockSignals(true);
     m_scalingCombo->blockSignals(true);
     m_clampingCombo->blockSignals(true);
@@ -1460,7 +1518,23 @@ void PropertiesPanel::updateSettingsControls()
     m_noAudioProcessingCheckBox->setChecked(m_currentSettings.noAudioProcessing);
     m_fpsSpinBox->setValue(m_currentSettings.fps);
     m_windowGeometryEdit->setText(m_currentSettings.windowGeometry);
-    m_screenRootCombo->setCurrentText(m_currentSettings.screenRoot.isEmpty() ? "Default" : m_currentSettings.screenRoot);
+    // Handle screen root settings in the correct order
+    m_customScreenRootEdit->setText(m_currentSettings.customScreenRoot);
+    // Find and select the correct screen option
+    QString savedScreen = m_currentSettings.screenRoot;
+    if (savedScreen.isEmpty()) {
+        m_screenRootCombo->setCurrentText("Default");
+    } else {
+        // Try to find the screen with resolution info first
+        int index = m_screenRootCombo->findText(savedScreen, Qt::MatchStartsWith);
+        if (index >= 0) {
+            m_screenRootCombo->setCurrentIndex(index);
+        } else {
+            // Fall back to exact match if not found
+            m_screenRootCombo->setCurrentText(savedScreen);
+        }
+    }
+    m_screenRootCombo->setEnabled(m_currentSettings.customScreenRoot.isEmpty());  // Must be after setting custom screen root
     m_backgroundIdEdit->setText(m_currentSettings.backgroundId);
     m_scalingCombo->setCurrentText(m_currentSettings.scaling);
     m_clampingCombo->setCurrentText(m_currentSettings.clamping);
@@ -1485,6 +1559,7 @@ void PropertiesPanel::updateSettingsControls()
     m_fpsSpinBox->blockSignals(false);
     m_windowGeometryEdit->blockSignals(false);
     m_screenRootCombo->blockSignals(false);
+    m_customScreenRootEdit->blockSignals(false);
     m_backgroundIdEdit->blockSignals(false);
     m_scalingCombo->blockSignals(false);
     m_clampingCombo->blockSignals(false);

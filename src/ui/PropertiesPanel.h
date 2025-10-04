@@ -35,6 +35,9 @@
 
 // New struct to hold custom wallpaper settings
 struct WallpaperSettings {
+    // Returns command line arguments based on current settings
+    QStringList toCommandLineArgs(bool isExternalWallpaper) const;
+
     // Audio settings
     bool silent = false;
     int volume = 15;
@@ -47,6 +50,7 @@ struct WallpaperSettings {
     // Display settings
     QString windowGeometry = "";
     QString screenRoot = "";
+    QString customScreenRoot = "";  // For custom screen-root override
     QString backgroundId = "";
     QString scaling = "default";
     QString clamping = "clamp";
@@ -94,7 +98,7 @@ public:
 signals:
     void launchWallpaper(const WallpaperInfo& wallpaper);
     void propertiesChanged(const QString& wallpaperId, const QJsonObject& properties);
-    void settingsChanged(const QString& wallpaperId, const WallpaperSettings& settings);
+    void settingsChanged(const QString& wallpaperId, const WallpaperSettings& settings, bool isExternalWallpaper);
     void wallpaperSelectionRejected(const QString& wallpaperId);
 
 private slots:
@@ -186,6 +190,7 @@ private:
     // Display settings controls
     QLineEdit* m_windowGeometryEdit;
     QComboBox* m_screenRootCombo;
+    QLineEdit* m_customScreenRootEdit;
     QLineEdit* m_backgroundIdEdit;
     QComboBox* m_scalingCombo;
     QComboBox* m_clampingCombo;
