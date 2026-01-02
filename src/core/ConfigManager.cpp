@@ -656,6 +656,232 @@ void ConfigManager::setWNELBinaryPath(const QString& path)
     m_settings->sync();
 }
 
+// Global Engine Defaults (system-wide defaults for all wallpapers)
+// Audio settings
+bool ConfigManager::globalSilent() const
+{
+    return m_settings->value("engine_defaults/silent", false).toBool();
+}
+
+void ConfigManager::setGlobalSilent(bool silent)
+{
+    m_settings->setValue("engine_defaults/silent", silent);
+    m_settings->sync();
+}
+
+int ConfigManager::globalVolume() const
+{
+    return m_settings->value("engine_defaults/volume", 15).toInt();
+}
+
+void ConfigManager::setGlobalVolume(int volume)
+{
+    m_settings->setValue("engine_defaults/volume", volume);
+    m_settings->sync();
+}
+
+bool ConfigManager::globalNoAutoMute() const
+{
+    return m_settings->value("engine_defaults/no_auto_mute", false).toBool();
+}
+
+void ConfigManager::setGlobalNoAutoMute(bool noAutoMute)
+{
+    m_settings->setValue("engine_defaults/no_auto_mute", noAutoMute);
+    m_settings->sync();
+}
+
+bool ConfigManager::globalNoAudioProcessing() const
+{
+    return m_settings->value("engine_defaults/no_audio_processing", false).toBool();
+}
+
+void ConfigManager::setGlobalNoAudioProcessing(bool noProcessing)
+{
+    m_settings->setValue("engine_defaults/no_audio_processing", noProcessing);
+    m_settings->sync();
+}
+
+// Performance settings
+int ConfigManager::globalFps() const
+{
+    return m_settings->value("engine_defaults/fps", 30).toInt();
+}
+
+void ConfigManager::setGlobalFps(int fps)
+{
+    m_settings->setValue("engine_defaults/fps", fps);
+    m_settings->sync();
+}
+
+// Display settings
+QString ConfigManager::globalWindowGeometry() const
+{
+    return m_settings->value("engine_defaults/window_geometry", "").toString();
+}
+
+void ConfigManager::setGlobalWindowGeometry(const QString& geometry)
+{
+    m_settings->setValue("engine_defaults/window_geometry", geometry);
+    m_settings->sync();
+}
+
+QString ConfigManager::globalScreenRoot() const
+{
+    return m_settings->value("engine_defaults/screen_root", "").toString();
+}
+
+void ConfigManager::setGlobalScreenRoot(const QString& root)
+{
+    m_settings->setValue("engine_defaults/screen_root", root);
+    m_settings->sync();
+}
+
+QString ConfigManager::globalBackgroundId() const
+{
+    return m_settings->value("engine_defaults/background_id", "").toString();
+}
+
+void ConfigManager::setGlobalBackgroundId(const QString& id)
+{
+    m_settings->setValue("engine_defaults/background_id", id);
+    m_settings->sync();
+}
+
+QString ConfigManager::globalScaling() const
+{
+    return m_settings->value("engine_defaults/scaling", "default").toString();
+}
+
+void ConfigManager::setGlobalScaling(const QString& scaling)
+{
+    m_settings->setValue("engine_defaults/scaling", scaling);
+    m_settings->sync();
+}
+
+QString ConfigManager::globalClamping() const
+{
+    return m_settings->value("engine_defaults/clamping", "clamp").toString();
+}
+
+void ConfigManager::setGlobalClamping(const QString& clamping)
+{
+    m_settings->setValue("engine_defaults/clamping", clamping);
+    m_settings->sync();
+}
+
+// Behavior settings
+bool ConfigManager::globalDisableMouse() const
+{
+    return m_settings->value("engine_defaults/disable_mouse", false).toBool();
+}
+
+void ConfigManager::setGlobalDisableMouse(bool disable)
+{
+    m_settings->setValue("engine_defaults/disable_mouse", disable);
+    m_settings->sync();
+}
+
+bool ConfigManager::globalDisableParallax() const
+{
+    return m_settings->value("engine_defaults/disable_parallax", false).toBool();
+}
+
+void ConfigManager::setGlobalDisableParallax(bool disable)
+{
+    m_settings->setValue("engine_defaults/disable_parallax", disable);
+    m_settings->sync();
+}
+
+bool ConfigManager::globalNoFullscreenPause() const
+{
+    return m_settings->value("engine_defaults/no_fullscreen_pause", false).toBool();
+}
+
+void ConfigManager::setGlobalNoFullscreenPause(bool noPause)
+{
+    m_settings->setValue("engine_defaults/no_fullscreen_pause", noPause);
+    m_settings->sync();
+}
+
+// WNEL-specific settings
+bool ConfigManager::globalNoLoop() const
+{
+    return m_settings->value("engine_defaults/no_loop", false).toBool();
+}
+
+void ConfigManager::setGlobalNoLoop(bool noLoop)
+{
+    m_settings->setValue("engine_defaults/no_loop", noLoop);
+    m_settings->sync();
+}
+
+bool ConfigManager::globalNoHardwareDecode() const
+{
+    return m_settings->value("engine_defaults/no_hardware_decode", false).toBool();
+}
+
+void ConfigManager::setGlobalNoHardwareDecode(bool noHardwareDecode)
+{
+    m_settings->setValue("engine_defaults/no_hardware_decode", noHardwareDecode);
+    m_settings->sync();
+}
+
+bool ConfigManager::globalForceX11() const
+{
+    return m_settings->value("engine_defaults/force_x11", false).toBool();
+}
+
+void ConfigManager::setGlobalForceX11(bool forceX11)
+{
+    m_settings->setValue("engine_defaults/force_x11", forceX11);
+    m_settings->sync();
+}
+
+bool ConfigManager::globalForceWayland() const
+{
+    return m_settings->value("engine_defaults/force_wayland", false).toBool();
+}
+
+void ConfigManager::setGlobalForceWayland(bool forceWayland)
+{
+    m_settings->setValue("engine_defaults/force_wayland", forceWayland);
+    m_settings->sync();
+}
+
+bool ConfigManager::globalVerbose() const
+{
+    return m_settings->value("engine_defaults/verbose", false).toBool();
+}
+
+void ConfigManager::setGlobalVerbose(bool verbose)
+{
+    m_settings->setValue("engine_defaults/verbose", verbose);
+    m_settings->sync();
+}
+
+QString ConfigManager::globalLogLevel() const
+{
+    return m_settings->value("engine_defaults/log_level", "info").toString();
+}
+
+void ConfigManager::setGlobalLogLevel(const QString& level)
+{
+    m_settings->setValue("engine_defaults/log_level", level);
+    m_settings->sync();
+}
+
+QString ConfigManager::globalMpvOptions() const
+{
+    return m_settings->value("engine_defaults/mpv_options", "").toString();
+}
+
+void ConfigManager::setGlobalMpvOptions(const QString& options)
+{
+    m_settings->setValue("engine_defaults/mpv_options", options);
+    m_settings->sync();
+}
+
 // Generic settings access for custom configuration values
 QVariant ConfigManager::value(const QString& key, const QVariant& defaultValue) const
 {

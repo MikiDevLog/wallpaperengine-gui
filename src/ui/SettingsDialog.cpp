@@ -3,6 +3,8 @@
 #include "../steam/SteamDetector.h"
 #include "../steam/SteamApiManager.h"
 #include <QApplication>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -13,6 +15,8 @@
 #include <QLineEdit>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QSpinBox>
+#include <QSlider>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QStandardPaths>
@@ -50,6 +54,9 @@ void SettingsDialog::setupUI()
     // Create Theme tab
     tabWidget->addTab(createThemeTab(), "Theme");
     
+    // Create Engine Defaults tab
+    tabWidget->addTab(createEngineDefaultsTab(), "Engine Defaults");
+    
     // Create Extra tab
     tabWidget->addTab(createExtraTab(), "Extra");
     
@@ -57,12 +64,15 @@ void SettingsDialog::setupUI()
     auto *buttonLayout = new QHBoxLayout;
     
     auto *resetButton = new QPushButton("Reset to Defaults");
+    auto *clearWallpaperSettingsButton = new QPushButton("Clear All Wallpaper Settings");
+    clearWallpaperSettingsButton->setToolTip("Delete all per-wallpaper saved settings (they will use global defaults)");
     auto *cancelButton = new QPushButton("Cancel");
     auto *okButton = new QPushButton("OK");
     
     okButton->setDefault(true);
     
     buttonLayout->addWidget(resetButton);
+    buttonLayout->addWidget(clearWallpaperSettingsButton);
     buttonLayout->addStretch();
     buttonLayout->addWidget(cancelButton);
     buttonLayout->addWidget(okButton);
@@ -71,6 +81,7 @@ void SettingsDialog::setupUI()
     
     // Connect buttons
     connect(resetButton, &QPushButton::clicked, this, &SettingsDialog::resetToDefaults);
+    connect(clearWallpaperSettingsButton, &QPushButton::clicked, this, &SettingsDialog::clearAllWallpaperSettings);
     connect(cancelButton, &QPushButton::clicked, this, &SettingsDialog::reject);
     connect(okButton, &QPushButton::clicked, this, &SettingsDialog::accept);
 }
@@ -402,6 +413,310 @@ QWidget* SettingsDialog::createThemeTab()
     return widget;
 }
 
+QWidget* SettingsDialog::createEngineDefaultsTab()
+{
+    auto* widget = new QWidget;
+    auto* mainLayout = new QVBoxLayout(widget);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    
+    // Create scroll area for engine defaults tab
+    auto* scrollArea = new QScrollArea;
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    
+    auto* scrollWidget = new QWidget;
+    auto* layout = new QVBoxLayout(scrollWidget);
+    layout->setContentsMargins(12, 12, 12, 12);
+    layout->setSpacing(20);
+    
+    // Info label
+    auto* infoLabel = new QLabel(
+        "Configure default engine settings that will be used for all wallpapers.\n"
+        "Individual wallpapers can override these settings in the Engine Settings tab."
+    );
+    infoLabel->setWordWrap(true);
+    infoLabel->setStyleSheet("QLabel { color: #666; background: #f0f0f0; padding: 8px; border-radius: 4px; }");
+    layout->addWidget(infoLabel);
+    
+    // Audio Settings Group
+    auto* audioGroup = new QGroupBox("Audio Settings");
+    auto* audioLayout = new QFormLayout(audioGroup);
+    audioLayout->setContentsMargins(12, 16, 12, 12);
+    audioLayout->setVerticalSpacing(16);
+    audioLayout->setHorizontalSpacing(24);
+    audioLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    
+    // Silent mode
+    m_globalSilentCheckBox = new QCheckBox("Silent mode");
+    m_globalSilentCheckBox->setMinimumHeight(28);
+    audioLayout->addRow("", m_globalSilentCheckBox);
+    connect(m_globalSilentCheckBox, &QCheckBox::toggled, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    // Volume slider with proper layout
+    auto* volumeWidget = new QWidget;
+    auto* volumeLayout = new QHBoxLayout(volumeWidget);
+    volumeLayout->setContentsMargins(0, 0, 0, 0);
+    volumeLayout->setSpacing(12);
+    
+    m_globalVolumeSlider = new QSlider(Qt::Horizontal);
+    m_globalVolumeSlider->setRange(0, 100);
+    m_globalVolumeSlider->setValue(15);
+    m_globalVolumeSlider->setMinimumWidth(200);
+    m_globalVolumeSlider->setMinimumHeight(28);
+    m_globalVolumeSlider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    
+    m_globalVolumeLabel = new QLabel("15%");
+    m_globalVolumeLabel->setMinimumWidth(50);
+    m_globalVolumeLabel->setMinimumHeight(28);
+    m_globalVolumeLabel->setAlignment(Qt::AlignCenter);
+    m_globalVolumeLabel->setStyleSheet("border: 1px solid #c0c0c0; padding: 4px; background: white;");
+    
+    volumeLayout->addWidget(m_globalVolumeSlider);
+    volumeLayout->addWidget(m_globalVolumeLabel);
+    
+    connect(m_globalVolumeSlider, &QSlider::valueChanged, this, [this](int value) {
+        m_globalVolumeLabel->setText(QString("%1%").arg(value));
+        onGlobalSettingChanged();
+    });
+    
+    auto* volumeLabel = new QLabel("Volume:");
+    volumeLabel->setMinimumWidth(80);
+    volumeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    volumeLabel->setStyleSheet("font-weight: bold;");
+    audioLayout->addRow(volumeLabel, volumeWidget);
+    
+    // Other audio checkboxes
+    m_globalNoAutoMuteCheckBox = new QCheckBox("Don't auto-mute");
+    m_globalNoAutoMuteCheckBox->setMinimumHeight(28);
+    audioLayout->addRow("", m_globalNoAutoMuteCheckBox);
+    connect(m_globalNoAutoMuteCheckBox, &QCheckBox::toggled, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    m_globalNoAudioProcessingCheckBox = new QCheckBox("No audio processing");
+    m_globalNoAudioProcessingCheckBox->setMinimumHeight(28);
+    audioLayout->addRow("", m_globalNoAudioProcessingCheckBox);
+    connect(m_globalNoAudioProcessingCheckBox, &QCheckBox::toggled, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    layout->addWidget(audioGroup);
+    
+    // Performance Settings Group
+    auto* perfGroup = new QGroupBox("Performance Settings");
+    auto* perfLayout = new QFormLayout(perfGroup);
+    perfLayout->setContentsMargins(12, 16, 12, 12);
+    perfLayout->setVerticalSpacing(16);
+    perfLayout->setHorizontalSpacing(24);
+    perfLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    
+    m_globalFpsSpinBox = new QSpinBox;
+    m_globalFpsSpinBox->setRange(1, 144);
+    m_globalFpsSpinBox->setValue(30);
+    m_globalFpsSpinBox->setSuffix(" FPS");
+    m_globalFpsSpinBox->setMinimumWidth(120);
+    m_globalFpsSpinBox->setMinimumHeight(28);
+    m_globalFpsSpinBox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    connect(m_globalFpsSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &SettingsDialog::onGlobalSettingChanged);
+    
+    auto* fpsLabel = new QLabel("Target FPS:");
+    fpsLabel->setMinimumWidth(80);
+    fpsLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    fpsLabel->setStyleSheet("font-weight: bold;");
+    perfLayout->addRow(fpsLabel, m_globalFpsSpinBox);
+    
+    layout->addWidget(perfGroup);
+    
+    // Display Settings Group
+    auto* displayGroup = new QGroupBox("Display Settings");
+    auto* displayLayout = new QFormLayout(displayGroup);
+    displayLayout->setContentsMargins(12, 16, 12, 12);
+    displayLayout->setVerticalSpacing(16);
+    displayLayout->setHorizontalSpacing(24);
+    displayLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    
+    auto createDisplayLabel = [](const QString& text) {
+        auto* label = new QLabel(text);
+        label->setMinimumWidth(100);
+        label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        label->setStyleSheet("font-weight: bold;");
+        return label;
+    };
+    
+    // Window Geometry
+    m_globalWindowGeometryEdit = new QLineEdit;
+    m_globalWindowGeometryEdit->setPlaceholderText("e.g., 1920x1080+0+0");
+    m_globalWindowGeometryEdit->setMinimumWidth(200);
+    m_globalWindowGeometryEdit->setMinimumHeight(28);
+    displayLayout->addRow(createDisplayLabel("Window Geometry:"), m_globalWindowGeometryEdit);
+    connect(m_globalWindowGeometryEdit, &QLineEdit::textChanged, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    // Screen root
+    m_globalScreenRootCombo = new QComboBox;
+    m_globalScreenRootCombo->setMinimumWidth(200);
+    m_globalScreenRootCombo->setMinimumHeight(28);
+    m_globalScreenRootCombo->addItem("Default");
+    
+    // Get available screens
+    QScreen* primaryScreen = qApp->primaryScreen();
+    if (primaryScreen) {
+        QString primaryName = primaryScreen->name();
+        QString primaryInfo = QString("%1 (Primary - %2x%3)")
+            .arg(primaryName)
+            .arg(primaryScreen->geometry().width())
+            .arg(primaryScreen->geometry().height());
+        m_globalScreenRootCombo->addItem(primaryInfo);
+    }
+    
+    // Add all other screens
+    for (QScreen* screen : qApp->screens()) {
+        if (screen != primaryScreen) {
+            QString screenName = screen->name();
+            QString screenInfo = QString("%1 (%2x%3)")
+                .arg(screenName)
+                .arg(screen->geometry().width())
+                .arg(screen->geometry().height());
+            m_globalScreenRootCombo->addItem(screenInfo);
+        }
+    }
+    
+    displayLayout->addRow(createDisplayLabel("Screen Root:"), m_globalScreenRootCombo);
+    connect(m_globalScreenRootCombo, &QComboBox::currentTextChanged, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    // Background ID
+    m_globalBackgroundIdEdit = new QLineEdit;
+    m_globalBackgroundIdEdit->setPlaceholderText("Background ID");
+    m_globalBackgroundIdEdit->setMinimumWidth(200);
+    m_globalBackgroundIdEdit->setMinimumHeight(28);
+    displayLayout->addRow(createDisplayLabel("Background ID:"), m_globalBackgroundIdEdit);
+    connect(m_globalBackgroundIdEdit, &QLineEdit::textChanged, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    // Scaling combo
+    m_globalScalingCombo = new QComboBox;
+    m_globalScalingCombo->addItems({"default", "stretch", "fit", "fill"});
+    m_globalScalingCombo->setMinimumWidth(150);
+    m_globalScalingCombo->setMinimumHeight(28);
+    displayLayout->addRow(createDisplayLabel("Scaling:"), m_globalScalingCombo);
+    connect(m_globalScalingCombo, &QComboBox::currentTextChanged, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    // Clamping combo
+    m_globalClampingCombo = new QComboBox;
+    m_globalClampingCombo->addItems({"clamp", "border", "repeat"});
+    m_globalClampingCombo->setMinimumWidth(150);
+    m_globalClampingCombo->setMinimumHeight(28);
+    displayLayout->addRow(createDisplayLabel("Clamping:"), m_globalClampingCombo);
+    connect(m_globalClampingCombo, &QComboBox::currentTextChanged, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    layout->addWidget(displayGroup);
+    
+    // Behavior Settings Group
+    auto* behaviorGroup = new QGroupBox("Behavior Settings");
+    auto* behaviorLayout = new QVBoxLayout(behaviorGroup);
+    behaviorLayout->setContentsMargins(12, 16, 12, 12);
+    behaviorLayout->setSpacing(12);
+    
+    m_globalDisableMouseCheckBox = new QCheckBox("Disable mouse input");
+    m_globalDisableMouseCheckBox->setMinimumHeight(28);
+    behaviorLayout->addWidget(m_globalDisableMouseCheckBox);
+    connect(m_globalDisableMouseCheckBox, &QCheckBox::toggled, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    m_globalDisableParallaxCheckBox = new QCheckBox("Disable parallax effect");
+    m_globalDisableParallaxCheckBox->setMinimumHeight(28);
+    behaviorLayout->addWidget(m_globalDisableParallaxCheckBox);
+    connect(m_globalDisableParallaxCheckBox, &QCheckBox::toggled, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    m_globalNoFullscreenPauseCheckBox = new QCheckBox("Don't pause on fullscreen");
+    m_globalNoFullscreenPauseCheckBox->setMinimumHeight(28);
+    behaviorLayout->addWidget(m_globalNoFullscreenPauseCheckBox);
+    connect(m_globalNoFullscreenPauseCheckBox, &QCheckBox::toggled, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    layout->addWidget(behaviorGroup);
+    
+    // WNEL-Specific Settings Group
+    auto* wnelGroup = new QGroupBox("WNEL-Specific Settings (External Wallpapers)");
+    auto* wnelLayout = new QFormLayout(wnelGroup);
+    wnelLayout->setContentsMargins(12, 16, 12, 12);
+    wnelLayout->setVerticalSpacing(16);
+    wnelLayout->setHorizontalSpacing(24);
+    wnelLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    
+    // Video settings
+    m_globalNoLoopCheckBox = new QCheckBox("Don't loop video");
+    m_globalNoLoopCheckBox->setMinimumHeight(28);
+    wnelLayout->addRow("", m_globalNoLoopCheckBox);
+    connect(m_globalNoLoopCheckBox, &QCheckBox::toggled, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    m_globalNoHardwareDecodeCheckBox = new QCheckBox("Disable hardware decoding");
+    m_globalNoHardwareDecodeCheckBox->setMinimumHeight(28);
+    wnelLayout->addRow("", m_globalNoHardwareDecodeCheckBox);
+    connect(m_globalNoHardwareDecodeCheckBox, &QCheckBox::toggled, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    // Backend settings - make them mutually exclusive
+    m_globalForceX11CheckBox = new QCheckBox("Force X11 backend");
+    m_globalForceX11CheckBox->setMinimumHeight(28);
+    wnelLayout->addRow("", m_globalForceX11CheckBox);
+    
+    m_globalForceWaylandCheckBox = new QCheckBox("Force Wayland backend");
+    m_globalForceWaylandCheckBox->setMinimumHeight(28);
+    wnelLayout->addRow("", m_globalForceWaylandCheckBox);
+    
+    // Make X11 and Wayland checkboxes mutually exclusive
+    connect(m_globalForceX11CheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        if (checked) m_globalForceWaylandCheckBox->setChecked(false);
+        onGlobalSettingChanged();
+    });
+    connect(m_globalForceWaylandCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        if (checked) m_globalForceX11CheckBox->setChecked(false);
+        onGlobalSettingChanged();
+    });
+    
+    // Debug settings
+    m_globalVerboseCheckBox = new QCheckBox("Verbose output");
+    m_globalVerboseCheckBox->setMinimumHeight(28);
+    wnelLayout->addRow("", m_globalVerboseCheckBox);
+    connect(m_globalVerboseCheckBox, &QCheckBox::toggled, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    // Log level
+    m_globalLogLevelCombo = new QComboBox;
+    m_globalLogLevelCombo->addItems({"debug", "info", "warn", "error"});
+    m_globalLogLevelCombo->setCurrentText("info");
+    m_globalLogLevelCombo->setMinimumHeight(28);
+    auto* logLevelLabel = new QLabel("Log Level:");
+    logLevelLabel->setMinimumWidth(80);
+    logLevelLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    logLevelLabel->setStyleSheet("font-weight: bold;");
+    wnelLayout->addRow(logLevelLabel, m_globalLogLevelCombo);
+    connect(m_globalLogLevelCombo, &QComboBox::currentTextChanged, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    // MPV options
+    m_globalMpvOptionsEdit = new QLineEdit;
+    m_globalMpvOptionsEdit->setPlaceholderText("Additional MPV options (advanced)");
+    m_globalMpvOptionsEdit->setMinimumHeight(28);
+    auto* mpvLabel = new QLabel("MPV Options:");
+    mpvLabel->setMinimumWidth(80);
+    mpvLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    mpvLabel->setStyleSheet("font-weight: bold;");
+    wnelLayout->addRow(mpvLabel, m_globalMpvOptionsEdit);
+    connect(m_globalMpvOptionsEdit, &QLineEdit::textChanged, this, &SettingsDialog::onGlobalSettingChanged);
+    
+    layout->addWidget(wnelGroup);
+    
+    // Reset button
+    auto* resetLayout = new QHBoxLayout;
+    auto* resetGlobalButton = new QPushButton("Reset to Hardcoded Defaults");
+    resetGlobalButton->setToolTip("Reset all engine defaults to original hardcoded values");
+    connect(resetGlobalButton, &QPushButton::clicked, this, &SettingsDialog::resetGlobalEngineDefaults);
+    resetLayout->addStretch();
+    resetLayout->addWidget(resetGlobalButton);
+    layout->addLayout(resetLayout);
+    
+    layout->addStretch();
+    
+    // Set the scroll widget
+    scrollArea->setWidget(scrollWidget);
+    mainLayout->addWidget(scrollArea);
+    
+    return widget;
+}
+
 QWidget* SettingsDialog::createExtraTab()
 {
     auto* widget = new QWidget;
@@ -571,6 +886,44 @@ void SettingsDialog::loadSettings()
     
     // Update UI state based on WNEL enabled state
     onWNELEnabledChanged(m_enableWNELCheckbox->isChecked());
+    
+    // Load Engine Defaults settings
+    m_globalSilentCheckBox->setChecked(m_config.globalSilent());
+    m_globalVolumeSlider->setValue(m_config.globalVolume());
+    m_globalVolumeLabel->setText(QString("%1%").arg(m_config.globalVolume()));
+    m_globalNoAutoMuteCheckBox->setChecked(m_config.globalNoAutoMute());
+    m_globalNoAudioProcessingCheckBox->setChecked(m_config.globalNoAudioProcessing());
+    m_globalFpsSpinBox->setValue(m_config.globalFps());
+    m_globalWindowGeometryEdit->setText(m_config.globalWindowGeometry());
+    
+    // Screen root
+    QString savedScreenRoot = m_config.globalScreenRoot();
+    if (savedScreenRoot.isEmpty()) {
+        m_globalScreenRootCombo->setCurrentText("Default");
+    } else {
+        int index = m_globalScreenRootCombo->findText(savedScreenRoot, Qt::MatchStartsWith);
+        if (index >= 0) {
+            m_globalScreenRootCombo->setCurrentIndex(index);
+        } else {
+            m_globalScreenRootCombo->setCurrentText(savedScreenRoot);
+        }
+    }
+    
+    m_globalBackgroundIdEdit->setText(m_config.globalBackgroundId());
+    m_globalScalingCombo->setCurrentText(m_config.globalScaling());
+    m_globalClampingCombo->setCurrentText(m_config.globalClamping());
+    m_globalDisableMouseCheckBox->setChecked(m_config.globalDisableMouse());
+    m_globalDisableParallaxCheckBox->setChecked(m_config.globalDisableParallax());
+    m_globalNoFullscreenPauseCheckBox->setChecked(m_config.globalNoFullscreenPause());
+    
+    // WNEL-specific
+    m_globalNoLoopCheckBox->setChecked(m_config.globalNoLoop());
+    m_globalNoHardwareDecodeCheckBox->setChecked(m_config.globalNoHardwareDecode());
+    m_globalForceX11CheckBox->setChecked(m_config.globalForceX11());
+    m_globalForceWaylandCheckBox->setChecked(m_config.globalForceWayland());
+    m_globalVerboseCheckBox->setChecked(m_config.globalVerbose());
+    m_globalLogLevelCombo->setCurrentText(m_config.globalLogLevel());
+    m_globalMpvOptionsEdit->setText(m_config.globalMpvOptions());
 }
 
 void SettingsDialog::saveSettings()
@@ -605,6 +958,37 @@ void SettingsDialog::saveSettings()
     m_config.setWNELAddonEnabled(m_enableWNELCheckbox->isChecked());
     m_config.setExternalWallpapersPath(m_externalWallpapersPathEdit->text());
     m_config.setWNELBinaryPath(m_wnelBinaryPathEdit->text());
+    
+    // Save Engine Defaults settings
+    m_config.setGlobalSilent(m_globalSilentCheckBox->isChecked());
+    m_config.setGlobalVolume(m_globalVolumeSlider->value());
+    m_config.setGlobalNoAutoMute(m_globalNoAutoMuteCheckBox->isChecked());
+    m_config.setGlobalNoAudioProcessing(m_globalNoAudioProcessingCheckBox->isChecked());
+    m_config.setGlobalFps(m_globalFpsSpinBox->value());
+    m_config.setGlobalWindowGeometry(m_globalWindowGeometryEdit->text());
+    
+    // Screen root - extract screen name without resolution info
+    QString selectedScreen = m_globalScreenRootCombo->currentText();
+    if (selectedScreen.contains("(")) {
+        selectedScreen = selectedScreen.left(selectedScreen.indexOf("(")).trimmed();
+    }
+    m_config.setGlobalScreenRoot(selectedScreen == "Default" ? "" : selectedScreen);
+    
+    m_config.setGlobalBackgroundId(m_globalBackgroundIdEdit->text());
+    m_config.setGlobalScaling(m_globalScalingCombo->currentText());
+    m_config.setGlobalClamping(m_globalClampingCombo->currentText());
+    m_config.setGlobalDisableMouse(m_globalDisableMouseCheckBox->isChecked());
+    m_config.setGlobalDisableParallax(m_globalDisableParallaxCheckBox->isChecked());
+    m_config.setGlobalNoFullscreenPause(m_globalNoFullscreenPauseCheckBox->isChecked());
+    
+    // WNEL-specific
+    m_config.setGlobalNoLoop(m_globalNoLoopCheckBox->isChecked());
+    m_config.setGlobalNoHardwareDecode(m_globalNoHardwareDecodeCheckBox->isChecked());
+    m_config.setGlobalForceX11(m_globalForceX11CheckBox->isChecked());
+    m_config.setGlobalForceWayland(m_globalForceWaylandCheckBox->isChecked());
+    m_config.setGlobalVerbose(m_globalVerboseCheckBox->isChecked());
+    m_config.setGlobalLogLevel(m_globalLogLevelCombo->currentText());
+    m_config.setGlobalMpvOptions(m_globalMpvOptionsEdit->text());
     
     // Mark first run as complete if configuration is now valid
     if (m_config.isConfigurationValid()) {
@@ -965,5 +1349,93 @@ void SettingsDialog::testWNELBinary()
                           .arg(output.left(200))
                           .arg(error.left(200));
         QMessageBox::warning(this, "Test Failed", errorMsg);
+    }
+}
+// Engine Defaults tab slots
+void SettingsDialog::onGlobalSettingChanged()
+{
+    // Auto-save global engine defaults on change
+    // (Alternatively, you could wait until user clicks OK)
+}
+
+void SettingsDialog::resetGlobalEngineDefaults()
+{
+    auto result = QMessageBox::question(this, "Reset Engine Defaults",
+        "Are you sure you want to reset all engine defaults to hardcoded values?\n\n"
+        "This will reset the system-wide defaults. Individual wallpaper settings will not be affected.");
+    
+    if (result == QMessageBox::Yes) {
+        // Reset all global engine defaults to hardcoded values
+        m_config.setGlobalSilent(false);
+        m_config.setGlobalVolume(15);
+        m_config.setGlobalNoAutoMute(false);
+        m_config.setGlobalNoAudioProcessing(false);
+        m_config.setGlobalFps(30);
+        m_config.setGlobalWindowGeometry("");
+        m_config.setGlobalScreenRoot("");
+        m_config.setGlobalBackgroundId("");
+        m_config.setGlobalScaling("default");
+        m_config.setGlobalClamping("clamp");
+        m_config.setGlobalDisableMouse(false);
+        m_config.setGlobalDisableParallax(false);
+        m_config.setGlobalNoFullscreenPause(false);
+        m_config.setGlobalNoLoop(false);
+        m_config.setGlobalNoHardwareDecode(false);
+        m_config.setGlobalForceX11(false);
+        m_config.setGlobalForceWayland(false);
+        m_config.setGlobalVerbose(false);
+        m_config.setGlobalLogLevel("info");
+        m_config.setGlobalMpvOptions("");
+        
+        // Reload settings to update UI
+        loadSettings();
+        
+        QMessageBox::information(this, "Reset Complete",
+            "All engine defaults have been reset to hardcoded values.");
+    }
+}
+
+void SettingsDialog::clearAllWallpaperSettings()
+{
+    auto result = QMessageBox::question(this, "Clear All Wallpaper Settings",
+        "Are you sure you want to delete ALL per-wallpaper saved settings?\n\n"
+        "This will remove all custom engine settings for individual wallpapers.\n"
+        "Wallpapers will use the global engine defaults instead.\n\n"
+        "This action cannot be undone.");
+    
+    if (result == QMessageBox::Yes) {
+        // Get the settings directory path
+        QString settingsDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        if (settingsDir.isEmpty()) {
+            settingsDir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation);
+        }
+        if (settingsDir.isEmpty()) {
+            settingsDir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + "/.cache/wallpaperengine-gui";
+        } else {
+            settingsDir += "/wallpaperengine-gui";
+        }
+        settingsDir += "/settings";
+        
+        QDir dir(settingsDir);
+        if (dir.exists()) {
+            // Remove all .json files in the settings directory
+            QStringList filters;
+            filters << "*.json";
+            QFileInfoList files = dir.entryInfoList(filters, QDir::Files);
+            
+            int deletedCount = 0;
+            for (const QFileInfo& fileInfo : files) {
+                if (QFile::remove(fileInfo.absoluteFilePath())) {
+                    deletedCount++;
+                }
+            }
+            
+            QMessageBox::information(this, "Settings Cleared",
+                QString("Successfully deleted %1 wallpaper settings file(s).\n\n"
+                        "All wallpapers will now use the global engine defaults.").arg(deletedCount));
+        } else {
+            QMessageBox::information(this, "Settings Cleared",
+                "No wallpaper settings directory found. Nothing to delete.");
+        }
     }
 }

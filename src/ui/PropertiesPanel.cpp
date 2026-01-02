@@ -1387,6 +1387,15 @@ bool PropertiesPanel::saveWallpaperSettings(const QString& wallpaperId)
     settingsObj["disableParallax"] = m_currentSettings.disableParallax;
     settingsObj["noFullscreenPause"] = m_currentSettings.noFullscreenPause;
     
+    // WNEL-specific settings
+    settingsObj["noLoop"] = m_currentSettings.noLoop;
+    settingsObj["noHardwareDecode"] = m_currentSettings.noHardwareDecode;
+    settingsObj["forceX11"] = m_currentSettings.forceX11;
+    settingsObj["forceWayland"] = m_currentSettings.forceWayland;
+    settingsObj["verbose"] = m_currentSettings.verbose;
+    settingsObj["logLevel"] = m_currentSettings.logLevel;
+    settingsObj["mpvOptions"] = m_currentSettings.mpvOptions;
+    
     QJsonDocument doc(settingsObj);
     
     QFile file(settingsPath);
@@ -1405,8 +1414,30 @@ bool PropertiesPanel::loadWallpaperSettings(const QString& wallpaperId)
     
     QFile file(settingsPath);
     if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
-        // Use default settings
-        m_currentSettings = WallpaperSettings();
+        // Use global defaults from ConfigManager
+        ConfigManager& config = ConfigManager::instance();
+        m_currentSettings.silent = config.globalSilent();
+        m_currentSettings.volume = config.globalVolume();
+        m_currentSettings.noAutoMute = config.globalNoAutoMute();
+        m_currentSettings.noAudioProcessing = config.globalNoAudioProcessing();
+        m_currentSettings.fps = config.globalFps();
+        m_currentSettings.windowGeometry = config.globalWindowGeometry();
+        m_currentSettings.screenRoot = config.globalScreenRoot();
+        m_currentSettings.customScreenRoot = "";  // Custom screen root is per-wallpaper only
+        m_currentSettings.backgroundId = config.globalBackgroundId();
+        m_currentSettings.scaling = config.globalScaling();
+        m_currentSettings.clamping = config.globalClamping();
+        m_currentSettings.disableMouse = config.globalDisableMouse();
+        m_currentSettings.disableParallax = config.globalDisableParallax();
+        m_currentSettings.noFullscreenPause = config.globalNoFullscreenPause();
+        m_currentSettings.noLoop = config.globalNoLoop();
+        m_currentSettings.noHardwareDecode = config.globalNoHardwareDecode();
+        m_currentSettings.forceX11 = config.globalForceX11();
+        m_currentSettings.forceWayland = config.globalForceWayland();
+        m_currentSettings.verbose = config.globalVerbose();
+        m_currentSettings.logLevel = config.globalLogLevel();
+        m_currentSettings.mpvOptions = config.globalMpvOptions();
+        
         updateSettingsControls();
         return false;
     }
@@ -1415,26 +1446,62 @@ bool PropertiesPanel::loadWallpaperSettings(const QString& wallpaperId)
     QJsonDocument doc = QJsonDocument::fromJson(data);
     
     if (!doc.isObject()) {
-        m_currentSettings = WallpaperSettings();
+        // Use global defaults from ConfigManager on parse error
+        ConfigManager& config = ConfigManager::instance();
+        m_currentSettings.silent = config.globalSilent();
+        m_currentSettings.volume = config.globalVolume();
+        m_currentSettings.noAutoMute = config.globalNoAutoMute();
+        m_currentSettings.noAudioProcessing = config.globalNoAudioProcessing();
+        m_currentSettings.fps = config.globalFps();
+        m_currentSettings.windowGeometry = config.globalWindowGeometry();
+        m_currentSettings.screenRoot = config.globalScreenRoot();
+        m_currentSettings.customScreenRoot = "";
+        m_currentSettings.backgroundId = config.globalBackgroundId();
+        m_currentSettings.scaling = config.globalScaling();
+        m_currentSettings.clamping = config.globalClamping();
+        m_currentSettings.disableMouse = config.globalDisableMouse();
+        m_currentSettings.disableParallax = config.globalDisableParallax();
+        m_currentSettings.noFullscreenPause = config.globalNoFullscreenPause();
+        m_currentSettings.noLoop = config.globalNoLoop();
+        m_currentSettings.noHardwareDecode = config.globalNoHardwareDecode();
+        m_currentSettings.forceX11 = config.globalForceX11();
+        m_currentSettings.forceWayland = config.globalForceWayland();
+        m_currentSettings.verbose = config.globalVerbose();
+        m_currentSettings.logLevel = config.globalLogLevel();
+        m_currentSettings.mpvOptions = config.globalMpvOptions();
+        
         updateSettingsControls();
         return false;
     }
     
+    // Load settings from JSON with fallback to global defaults
+    ConfigManager& config = ConfigManager::instance();
     QJsonObject obj = doc.object();
-    m_currentSettings.silent = obj["silent"].toBool();
-    m_currentSettings.volume = obj["volume"].toInt(15);
-    m_currentSettings.noAutoMute = obj["noAutoMute"].toBool();
-    m_currentSettings.noAudioProcessing = obj["noAudioProcessing"].toBool();
-    m_currentSettings.fps = obj["fps"].toInt(30);
-    m_currentSettings.windowGeometry = obj["windowGeometry"].toString();
-    m_currentSettings.screenRoot = obj["screenRoot"].toString();
-    m_currentSettings.customScreenRoot = obj["customScreenRoot"].toString();
-    m_currentSettings.backgroundId = obj["backgroundId"].toString();
-    m_currentSettings.scaling = obj["scaling"].toString("default");
-    m_currentSettings.clamping = obj["clamping"].toString("clamp");
-    m_currentSettings.disableMouse = obj["disableMouse"].toBool();
-    m_currentSettings.disableParallax = obj["disableParallax"].toBool();
-    m_currentSettings.noFullscreenPause = obj["noFullscreenPause"].toBool();
+    
+    // Use saved value if present, otherwise fall back to global default
+    m_currentSettings.silent = obj.contains("silent") ? obj["silent"].toBool() : config.globalSilent();
+    m_currentSettings.volume = obj.contains("volume") ? obj["volume"].toInt() : config.globalVolume();
+    m_currentSettings.noAutoMute = obj.contains("noAutoMute") ? obj["noAutoMute"].toBool() : config.globalNoAutoMute();
+    m_currentSettings.noAudioProcessing = obj.contains("noAudioProcessing") ? obj["noAudioProcessing"].toBool() : config.globalNoAudioProcessing();
+    m_currentSettings.fps = obj.contains("fps") ? obj["fps"].toInt() : config.globalFps();
+    m_currentSettings.windowGeometry = obj.contains("windowGeometry") ? obj["windowGeometry"].toString() : config.globalWindowGeometry();
+    m_currentSettings.screenRoot = obj.contains("screenRoot") ? obj["screenRoot"].toString() : config.globalScreenRoot();
+    m_currentSettings.customScreenRoot = obj["customScreenRoot"].toString();  // Always per-wallpaper
+    m_currentSettings.backgroundId = obj.contains("backgroundId") ? obj["backgroundId"].toString() : config.globalBackgroundId();
+    m_currentSettings.scaling = obj.contains("scaling") ? obj["scaling"].toString() : config.globalScaling();
+    m_currentSettings.clamping = obj.contains("clamping") ? obj["clamping"].toString() : config.globalClamping();
+    m_currentSettings.disableMouse = obj.contains("disableMouse") ? obj["disableMouse"].toBool() : config.globalDisableMouse();
+    m_currentSettings.disableParallax = obj.contains("disableParallax") ? obj["disableParallax"].toBool() : config.globalDisableParallax();
+    m_currentSettings.noFullscreenPause = obj.contains("noFullscreenPause") ? obj["noFullscreenPause"].toBool() : config.globalNoFullscreenPause();
+    
+    // WNEL-specific settings
+    m_currentSettings.noLoop = obj.contains("noLoop") ? obj["noLoop"].toBool() : config.globalNoLoop();
+    m_currentSettings.noHardwareDecode = obj.contains("noHardwareDecode") ? obj["noHardwareDecode"].toBool() : config.globalNoHardwareDecode();
+    m_currentSettings.forceX11 = obj.contains("forceX11") ? obj["forceX11"].toBool() : config.globalForceX11();
+    m_currentSettings.forceWayland = obj.contains("forceWayland") ? obj["forceWayland"].toBool() : config.globalForceWayland();
+    m_currentSettings.verbose = obj.contains("verbose") ? obj["verbose"].toBool() : config.globalVerbose();
+    m_currentSettings.logLevel = obj.contains("logLevel") ? obj["logLevel"].toString() : config.globalLogLevel();
+    m_currentSettings.mpvOptions = obj.contains("mpvOptions") ? obj["mpvOptions"].toString() : config.globalMpvOptions();
     
     updateSettingsControls();
     return true;
@@ -1597,7 +1664,30 @@ void PropertiesPanel::clear()
     qCDebug(propertiesPanel) << "Clearing properties panel";
     
     m_currentWallpaper = WallpaperInfo();
-    m_currentSettings = WallpaperSettings(); // Reset settings to defaults
+    
+    // Reset settings to global defaults instead of hardcoded defaults
+    ConfigManager& config = ConfigManager::instance();
+    m_currentSettings.silent = config.globalSilent();
+    m_currentSettings.volume = config.globalVolume();
+    m_currentSettings.noAutoMute = config.globalNoAutoMute();
+    m_currentSettings.noAudioProcessing = config.globalNoAudioProcessing();
+    m_currentSettings.fps = config.globalFps();
+    m_currentSettings.windowGeometry = config.globalWindowGeometry();
+    m_currentSettings.screenRoot = config.globalScreenRoot();
+    m_currentSettings.customScreenRoot = "";
+    m_currentSettings.backgroundId = config.globalBackgroundId();
+    m_currentSettings.scaling = config.globalScaling();
+    m_currentSettings.clamping = config.globalClamping();
+    m_currentSettings.disableMouse = config.globalDisableMouse();
+    m_currentSettings.disableParallax = config.globalDisableParallax();
+    m_currentSettings.noFullscreenPause = config.globalNoFullscreenPause();
+    m_currentSettings.noLoop = config.globalNoLoop();
+    m_currentSettings.noHardwareDecode = config.globalNoHardwareDecode();
+    m_currentSettings.forceX11 = config.globalForceX11();
+    m_currentSettings.forceWayland = config.globalForceWayland();
+    m_currentSettings.verbose = config.globalVerbose();
+    m_currentSettings.logLevel = config.globalLogLevel();
+    m_currentSettings.mpvOptions = config.globalMpvOptions();
     
     m_propertyWidgets.clear();
     m_originalValues.clear();

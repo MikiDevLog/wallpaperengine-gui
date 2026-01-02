@@ -1413,24 +1413,40 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
                     if (settings["noFullscreenPause"].toBool()) additionalArgs << "--no-fullscreen-pause";
                 }
             } else {
-                // No settings file exists, apply default values that are shown in GUI
-                // This ensures the displayed defaults are actually applied on first launch
+                // No settings file exists, apply global defaults from ConfigManager
+                qCDebug(mainWindow) << "No settings file found, using global engine defaults";
                 
-                // Volume default is 15% - apply it explicitly
-                additionalArgs << "--volume" << "15";
+                ConfigManager& config = ConfigManager::instance();
                 
-                // FPS default is 30 - apply it explicitly  
-                additionalArgs << "--fps" << "30";
+                // Apply global defaults
+                if (config.globalSilent()) additionalArgs << "--silent";
+                
+                int volume = config.globalVolume();
+                if (volume != 15) additionalArgs << "--volume" << QString::number(volume);
+                
+                int fps = config.globalFps();
+                if (fps != 30) additionalArgs << "--fps" << QString::number(fps);
                 
                 // Screen root handling based on wallpaper type
-                if (wallpaper.type == "External") {
-                    additionalArgs << "--output" << "HDMI-A-1";
-                } else {
-                    additionalArgs << "--screen-root" << "HDMI-A-1";
+                QString screenRoot = config.globalScreenRoot();
+                if (!screenRoot.isEmpty()) {
+                    if (wallpaper.type == "External") {
+                        additionalArgs << "--output" << screenRoot;
+                    } else {
+                        additionalArgs << "--screen-root" << screenRoot;
+                    }
                 }
                 
-                // Other defaults (silent=false, scaling=default, clamping=clamp) don't need explicit args
-                // as they are the wallpaper engine's own defaults
+                QString scaling = config.globalScaling();
+                if (scaling != "default") additionalArgs << "--scaling" << scaling;
+                
+                QString clamping = config.globalClamping();
+                if (clamping != "clamp") additionalArgs << "--clamping" << clamping;
+                
+                if (config.globalNoAutoMute()) additionalArgs << "--noautomute";
+                if (config.globalDisableMouse()) additionalArgs << "--disable-mouse";
+                if (config.globalDisableParallax()) additionalArgs << "--disable-parallax";
+                if (config.globalNoFullscreenPause()) additionalArgs << "--no-fullscreen-pause";
             }
         }
         

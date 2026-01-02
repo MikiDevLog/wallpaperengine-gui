@@ -149,6 +149,57 @@ public:
     QString wnelBinaryPath() const;
     void setWNELBinaryPath(const QString& path);
     
+    // Global Engine Defaults (system-wide defaults for all wallpapers)
+    // Audio settings
+    bool globalSilent() const;
+    void setGlobalSilent(bool silent);
+    int globalVolume() const;
+    void setGlobalVolume(int volume);
+    bool globalNoAutoMute() const;
+    void setGlobalNoAutoMute(bool noAutoMute);
+    bool globalNoAudioProcessing() const;
+    void setGlobalNoAudioProcessing(bool noProcessing);
+    
+    // Performance settings
+    int globalFps() const;
+    void setGlobalFps(int fps);
+    
+    // Display settings
+    QString globalWindowGeometry() const;
+    void setGlobalWindowGeometry(const QString& geometry);
+    QString globalScreenRoot() const;
+    void setGlobalScreenRoot(const QString& root);
+    QString globalBackgroundId() const;
+    void setGlobalBackgroundId(const QString& id);
+    QString globalScaling() const;
+    void setGlobalScaling(const QString& scaling);
+    QString globalClamping() const;
+    void setGlobalClamping(const QString& clamping);
+    
+    // Behavior settings
+    bool globalDisableMouse() const;
+    void setGlobalDisableMouse(bool disable);
+    bool globalDisableParallax() const;
+    void setGlobalDisableParallax(bool disable);
+    bool globalNoFullscreenPause() const;
+    void setGlobalNoFullscreenPause(bool noPause);
+    
+    // WNEL-specific settings
+    bool globalNoLoop() const;
+    void setGlobalNoLoop(bool noLoop);
+    bool globalNoHardwareDecode() const;
+    void setGlobalNoHardwareDecode(bool noHardwareDecode);
+    bool globalForceX11() const;
+    void setGlobalForceX11(bool forceX11);
+    bool globalForceWayland() const;
+    void setGlobalForceWayland(bool forceWayland);
+    bool globalVerbose() const;
+    void setGlobalVerbose(bool verbose);
+    QString globalLogLevel() const;
+    void setGlobalLogLevel(const QString& level);
+    QString globalMpvOptions() const;
+    void setGlobalMpvOptions(const QString& options);
+    
     // Generic settings access for custom configuration values
     QVariant value(const QString& key, const QVariant& defaultValue = QVariant()) const;
     void setValue(const QString& key, const QVariant& value);

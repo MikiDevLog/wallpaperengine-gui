@@ -14,6 +14,9 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QScrollArea>
+#include <QSpinBox>
+#include <QSlider>
+#include <QScreen>
 
 class ConfigManager;
 
@@ -34,6 +37,7 @@ private slots:
     void removeSteamLibrary();
     void onSteamLibraryChanged();
     void resetToDefaults();
+    void clearAllWallpaperSettings();
     
     // Steam API slots
     void testApiKey();
@@ -49,6 +53,10 @@ private slots:
     void browseExternalWallpapersPath();
     void browseWNELBinaryPath();
     void testWNELBinary();
+    
+    // Engine Defaults tab slots
+    void onGlobalSettingChanged();
+    void resetGlobalEngineDefaults();
 
 private:
     void setupUI();
@@ -56,6 +64,7 @@ private:
     QWidget* createApiTab();       // Method for Steam API tab
     QWidget* createThemeTab();     // Method for Theme tab
     QWidget* createExtraTab();     // Method for Extra tab
+    QWidget* createEngineDefaultsTab();  // Method for Engine Defaults tab
     void loadSettings();
     void saveSettings();
     void updateSteamStatus();
@@ -93,6 +102,38 @@ private:
     QLineEdit* m_wnelBinaryPathEdit;
     QPushButton* m_browseWNELBinaryButton;
     QPushButton* m_testWNELBinaryButton;
+    
+    // Engine Defaults tab components
+    // Audio settings
+    QCheckBox* m_globalSilentCheckBox;
+    QSlider* m_globalVolumeSlider;
+    QLabel* m_globalVolumeLabel;
+    QCheckBox* m_globalNoAutoMuteCheckBox;
+    QCheckBox* m_globalNoAudioProcessingCheckBox;
+    
+    // Performance settings
+    QSpinBox* m_globalFpsSpinBox;
+    
+    // Display settings
+    QLineEdit* m_globalWindowGeometryEdit;
+    QComboBox* m_globalScreenRootCombo;
+    QLineEdit* m_globalBackgroundIdEdit;
+    QComboBox* m_globalScalingCombo;
+    QComboBox* m_globalClampingCombo;
+    
+    // Behavior settings
+    QCheckBox* m_globalDisableMouseCheckBox;
+    QCheckBox* m_globalDisableParallaxCheckBox;
+    QCheckBox* m_globalNoFullscreenPauseCheckBox;
+    
+    // WNEL-specific settings
+    QCheckBox* m_globalNoLoopCheckBox;
+    QCheckBox* m_globalNoHardwareDecodeCheckBox;
+    QCheckBox* m_globalForceX11CheckBox;
+    QCheckBox* m_globalForceWaylandCheckBox;
+    QCheckBox* m_globalVerboseCheckBox;
+    QComboBox* m_globalLogLevelCombo;
+    QLineEdit* m_globalMpvOptionsEdit;
     
     // Configuration
     ConfigManager& m_config;

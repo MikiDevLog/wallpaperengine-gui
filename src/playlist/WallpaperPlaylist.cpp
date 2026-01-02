@@ -385,10 +385,32 @@ QStringList WallpaperPlaylist::loadWallpaperSettings(const QString& wallpaperId)
             if (settings["noFullscreenPause"].toBool()) args << "--no-fullscreen-pause";
         }
     } else {
-        // No settings file exists, apply default values (same as MainWindow)
-        args << "--volume" << "15";
-        args << "--fps" << "30";
-        args << "--screen-root" << "HDMI-A-1";
+        // No settings file exists, apply global defaults from ConfigManager
+        ConfigManager& config = ConfigManager::instance();
+        
+        if (config.globalSilent()) args << "--silent";
+        
+        int volume = config.globalVolume();
+        if (volume != 15) args << "--volume" << QString::number(volume);
+        
+        int fps = config.globalFps();
+        if (fps != 30) args << "--fps" << QString::number(fps);
+        
+        QString screenRoot = config.globalScreenRoot();
+        if (!screenRoot.isEmpty()) {
+            args << "--screen-root" << screenRoot;
+        }
+        
+        QString scaling = config.globalScaling();
+        if (scaling != "default") args << "--scaling" << scaling;
+        
+        QString clamping = config.globalClamping();
+        if (clamping != "clamp") args << "--clamping" << clamping;
+        
+        if (config.globalNoAutoMute()) args << "--noautomute";
+        if (config.globalDisableMouse()) args << "--disable-mouse";
+        if (config.globalDisableParallax()) args << "--disable-parallax";
+        if (config.globalNoFullscreenPause()) args << "--no-fullscreen-pause";
     }
     
     return args;
