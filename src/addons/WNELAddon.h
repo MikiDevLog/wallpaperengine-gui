@@ -95,6 +95,7 @@ private:
     bool createSymlink(const QString& target, const QString& linkPath);
     QString generateProjectJsonContent(const ExternalWallpaperInfo& info) const;
     void refreshExternalWallpapers();
+    bool verifyProcessTerminated(qint64 pid);  // Helper to verify process is really dead
     
     // Member variables
     QProcess* m_wallpaperProcess;

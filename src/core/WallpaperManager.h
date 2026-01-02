@@ -73,6 +73,7 @@ private:
     QString findPreviewImage(const QString& wallpaperDir);
     QString extractWorkshopId(const QString& dirPath);
     QStringList generatePropertyArguments(const QString& projectJsonPath);
+    bool verifyProcessTerminated(qint64 pid);  // Helper to verify process is really dead
     
     QList<WallpaperInfo> m_wallpapers;
     QProcess* m_wallpaperProcess;

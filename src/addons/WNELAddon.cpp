@@ -18,6 +18,8 @@
 #include <QMessageBox>
 #include <QApplication>
 #include <QRandomGenerator>
+#include <signal.h>
+#include <cerrno>
 
 Q_LOGGING_CATEGORY(wnelAddon, "app.wnelAddon")
 
@@ -566,15 +568,28 @@ void WNELAddon::stopWallpaper()
 {
     if (m_wallpaperProcess) {
         qCDebug(wnelAddon) << "Stopping external wallpaper process";
+        qint64 pid = m_wallpaperProcess->processId();
         
-        // Disconnect signals to prevent double cleanup
         m_wallpaperProcess->disconnect();
         
         m_wallpaperProcess->terminate();
-        if (!m_wallpaperProcess->waitForFinished(3000)) {
+        if (!m_wallpaperProcess->waitForFinished(2000)) {
             qCWarning(wnelAddon) << "Process did not terminate gracefully, killing it";
             m_wallpaperProcess->kill();
-            m_wallpaperProcess->waitForFinished(1000);
+            m_wallpaperProcess->waitForFinished(1500);
+        }
+        
+        // Kill child processes
+        if (pid > 0) {
+            QProcess pkillProcess;
+            QStringList pkillArgs;
+            pkillArgs << "-P" << QString::number(pid);
+            pkillProcess.start("pkill", pkillArgs);
+            pkillProcess.waitForFinished(1000);
+            
+            if (pkillProcess.exitCode() == 0) {
+                qCDebug(wnelAddon) << "Killed child processes of external wallpaper";
+            }
         }
         
         m_wallpaperProcess->deleteLater();
@@ -791,5 +806,25 @@ void WNELAddon::onProcessOutput()
         if (!standardError.isEmpty()) {
             emit outputReceived(QString::fromUtf8(standardError));
         }
+    }
+}
+
+bool WNELAddon::verifyProcessTerminated(qint64 pid)
+{
+    if (pid <= 0) {
+        return true;
+    }
+    
+    int killResult = kill(pid, 0);
+    
+    if (killResult == 0) {
+        qCWarning(wnelAddon) << "Process still exists after termination";
+        return false;
+    } else if (errno == ESRCH) {
+        qCDebug(wnelAddon) << "Process terminated successfully";
+        return true;
+    } else {
+        qCWarning(wnelAddon) << "Error checking process state";
+        return false;
     }
 }

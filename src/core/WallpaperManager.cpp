@@ -10,6 +10,8 @@
 #include <QLoggingCategory>
 #include <QProcessEnvironment>
 #include <QTimer>
+#include <signal.h>
+#include <cerrno>
 
 Q_LOGGING_CATEGORY(wallpaperManager, "app.wallpaperManager")
 
@@ -348,11 +350,27 @@ void WallpaperManager::stopWallpaper()
 {
     if (m_wallpaperProcess) {
         emit outputReceived("Stopping wallpaper...");
+        qint64 pid = m_wallpaperProcess->processId();
+        
         m_wallpaperProcess->terminate();
         
-        if (!m_wallpaperProcess->waitForFinished(5000)) {
+        if (!m_wallpaperProcess->waitForFinished(2000)) {
+            qCWarning(wallpaperManager) << "Process did not terminate gracefully, killing it";
             m_wallpaperProcess->kill();
-            m_wallpaperProcess->waitForFinished(3000);
+            m_wallpaperProcess->waitForFinished(1500);
+        }
+        
+        // Kill child processes
+        if (pid > 0) {
+            QProcess pkillProcess;
+            QStringList pkillArgs;
+            pkillArgs << "-P" << QString::number(pid);
+            pkillProcess.start("pkill", pkillArgs);
+            pkillProcess.waitForFinished(1000);
+            
+            if (pkillProcess.exitCode() == 0) {
+                qCDebug(wallpaperManager) << "Killed child processes of wallpaper";
+            }
         }
         
         delete m_wallpaperProcess;
@@ -539,4 +557,24 @@ QStringList WallpaperManager::generatePropertyArguments(const QString& projectJs
     
     qCDebug(wallpaperManager) << "Generated" << propertyPairs.size() << "property arguments from" << projectJsonPath;
     return propertyArgs;
+}
+
+bool WallpaperManager::verifyProcessTerminated(qint64 pid)
+{
+    if (pid <= 0) {
+        return true;
+    }
+    
+    int killResult = kill(pid, 0);
+    
+    if (killResult == 0) {
+        qCWarning(wallpaperManager) << "Process still exists after termination";
+        return false;
+    } else if (errno == ESRCH) {
+        qCDebug(wallpaperManager) << "Process terminated successfully";
+        return true;
+    } else {
+        qCWarning(wallpaperManager) << "Error checking process state";
+        return false;
+    }
 }
