@@ -38,6 +38,9 @@ struct WallpaperSettings {
     // Returns command line arguments based on current settings
     QStringList toCommandLineArgs(bool isExternalWallpaper) const;
 
+    // Control flag
+    bool useGlobalDefaults = true;  // By default, use system-wide settings
+    
     // Audio settings
     bool silent = false;
     int volume = 15;
@@ -177,10 +180,13 @@ private:
     QWidget* m_settingsWidget;
     QPushButton* m_saveSettingsButton;
     
+    // Control checkbox for using global defaults
+    QCheckBox* m_useGlobalDefaultsCheckBox;
+    
     // Audio settings controls
     QCheckBox* m_silentCheckBox;
     QSlider* m_volumeSlider;
-    QLabel* m_volumeLabel;
+    QSpinBox* m_volumeSpinBox;
     QCheckBox* m_noAutoMuteCheckBox;
     QCheckBox* m_noAudioProcessingCheckBox;
     

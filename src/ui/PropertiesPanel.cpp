@@ -133,9 +133,10 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_scrollArea(new QScrollArea)
     , m_settingsWidget(nullptr)
     , m_saveSettingsButton(new QPushButton("Save Settings"))
+    , m_useGlobalDefaultsCheckBox(new QCheckBox("Use system-wide engine defaults"))
     , m_silentCheckBox(new QCheckBox("Silent mode"))
     , m_volumeSlider(new QSlider(Qt::Horizontal))
-    , m_volumeLabel(new QLabel("15%"))
+    , m_volumeSpinBox(new QSpinBox)
     , m_noAutoMuteCheckBox(new QCheckBox("Don't mute when other apps play audio"))
     , m_noAudioProcessingCheckBox(new QCheckBox("Disable audio processing"))
     , m_fpsSpinBox(new QSpinBox)
@@ -202,7 +203,11 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     // Connect settings change signals
     connect(m_silentCheckBox, &QCheckBox::toggled, this, &PropertiesPanel::onSettingChanged);
     connect(m_volumeSlider, &QSlider::valueChanged, this, [this](int value) {
-        m_volumeLabel->setText(QString("%1%").arg(value));
+        m_volumeSpinBox->setValue(value);
+        onSettingChanged();
+    });
+    connect(m_volumeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
+        m_volumeSlider->setValue(value);
         onSettingChanged();
     });
     connect(m_noAutoMuteCheckBox, &QCheckBox::toggled, this, &PropertiesPanel::onSettingChanged);
@@ -471,6 +476,69 @@ void PropertiesPanel::setupSettingsUI(QWidget* settingsTab)
     scrollLayout->setContentsMargins(16, 16, 16, 16);
     scrollLayout->setSpacing(20);
     
+    // Add "Use Global Defaults" checkbox at the top
+    auto* globalDefaultsGroup = new QGroupBox("Settings Mode");
+    auto* globalDefaultsLayout = new QVBoxLayout(globalDefaultsGroup);
+    globalDefaultsLayout->setContentsMargins(12, 16, 12, 12);
+    
+    m_useGlobalDefaultsCheckBox->setChecked(true);  // Default to using global defaults
+    m_useGlobalDefaultsCheckBox->setToolTip(
+        "When checked, this wallpaper will use the system-wide engine defaults.\n"
+        "Uncheck to customize settings for this specific wallpaper.");
+    globalDefaultsLayout->addWidget(m_useGlobalDefaultsCheckBox);
+    
+    auto* infoLabel = new QLabel(
+        "✓ Using system-wide defaults - Settings are managed in Settings → Engine Defaults\n"
+        "  Uncheck to customize settings for this wallpaper only");
+    infoLabel->setWordWrap(true);
+    infoLabel->setStyleSheet("QLabel { color: #666; font-size: 10px; margin-top: 4px; }");
+    infoLabel->setObjectName("globalDefaultsInfoLabel");
+    globalDefaultsLayout->addWidget(infoLabel);
+    
+    scrollLayout->addWidget(globalDefaultsGroup);
+    
+    // Connect the checkbox to enable/disable all settings controls
+    connect(m_useGlobalDefaultsCheckBox, &QCheckBox::toggled, this, [this, infoLabel](bool useGlobal) {
+        // Enable/disable all settings controls based on checkbox
+        m_silentCheckBox->setEnabled(!useGlobal);
+        m_volumeSlider->setEnabled(!useGlobal);
+        m_noAutoMuteCheckBox->setEnabled(!useGlobal);
+        m_noAudioProcessingCheckBox->setEnabled(!useGlobal);
+        m_fpsSpinBox->setEnabled(!useGlobal);
+        m_windowGeometryEdit->setEnabled(!useGlobal);
+        m_screenRootCombo->setEnabled(!useGlobal && m_customScreenRootEdit->text().isEmpty());
+        m_customScreenRootEdit->setEnabled(!useGlobal);
+        m_backgroundIdEdit->setEnabled(!useGlobal);
+        m_scalingCombo->setEnabled(!useGlobal);
+        m_clampingCombo->setEnabled(!useGlobal);
+        m_disableMouseCheckBox->setEnabled(!useGlobal);
+        m_disableParallaxCheckBox->setEnabled(!useGlobal);
+        m_noFullscreenPauseCheckBox->setEnabled(!useGlobal);
+        m_noLoopCheckBox->setEnabled(!useGlobal);
+        m_noHardwareDecodeCheckBox->setEnabled(!useGlobal);
+        m_forceX11CheckBox->setEnabled(!useGlobal);
+        m_forceWaylandCheckBox->setEnabled(!useGlobal);
+        m_verboseCheckBox->setEnabled(!useGlobal);
+        m_logLevelCombo->setEnabled(!useGlobal);
+        m_mpvOptionsEdit->setEnabled(!useGlobal);
+        
+        // Update info label
+        if (useGlobal) {
+            infoLabel->setText(
+                "✓ Using system-wide defaults - Settings are managed in Settings → Engine Defaults\n"
+                "  Uncheck to customize settings for this wallpaper only");
+            infoLabel->setStyleSheet("QLabel { color: #666; font-size: 10px; margin-top: 4px; }");
+        } else {
+            infoLabel->setText(
+                "✓ Custom settings enabled - Changes apply only to this wallpaper\n"
+                "  Check the box above to revert to system-wide defaults");
+            infoLabel->setStyleSheet("QLabel { color: #0066cc; font-size: 10px; margin-top: 4px; }");
+        }
+        
+        // Mark as modified
+        onSettingChanged();
+    });
+    
     // Audio Settings Group
     auto* audioGroup = new QGroupBox("Audio Settings");
     auto* audioLayout = new QFormLayout(audioGroup);
@@ -495,13 +563,15 @@ void PropertiesPanel::setupSettingsUI(QWidget* settingsTab)
     m_volumeSlider->setMinimumHeight(28);
     m_volumeSlider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     
-    m_volumeLabel->setMinimumWidth(50);
-    m_volumeLabel->setMinimumHeight(28);
-    m_volumeLabel->setAlignment(Qt::AlignCenter);
-    m_volumeLabel->setStyleSheet("border: 1px solid #c0c0c0; padding: 4px; background: white;");
+    m_volumeSpinBox->setRange(0, 100);
+    m_volumeSpinBox->setValue(15);
+    m_volumeSpinBox->setSuffix("%");
+    m_volumeSpinBox->setMinimumWidth(80);
+    m_volumeSpinBox->setMinimumHeight(28);
+    m_volumeSpinBox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     
     volumeLayout->addWidget(m_volumeSlider);
-    volumeLayout->addWidget(m_volumeLabel);
+    volumeLayout->addWidget(m_volumeSpinBox);
     
     auto* volumeLabel = new QLabel("Volume:");
     volumeLabel->setMinimumWidth(80);
@@ -1228,6 +1298,9 @@ void PropertiesPanel::onResetPropertiesClicked()
 
 void PropertiesPanel::onSettingChanged()
 {
+    // Update useGlobalDefaults flag
+    m_currentSettings.useGlobalDefaults = m_useGlobalDefaultsCheckBox->isChecked();
+    
     // Update current settings from UI controls
     m_currentSettings.silent = m_silentCheckBox->isChecked();
     m_currentSettings.volume = m_volumeSlider->value();
@@ -1396,6 +1469,9 @@ bool PropertiesPanel::saveWallpaperSettings(const QString& wallpaperId)
     settingsObj["logLevel"] = m_currentSettings.logLevel;
     settingsObj["mpvOptions"] = m_currentSettings.mpvOptions;
     
+    // Save the useGlobalDefaults flag
+    settingsObj["useGlobalDefaults"] = m_currentSettings.useGlobalDefaults;
+    
     QJsonDocument doc(settingsObj);
     
     QFile file(settingsPath);
@@ -1416,6 +1492,7 @@ bool PropertiesPanel::loadWallpaperSettings(const QString& wallpaperId)
     if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
         // Use global defaults from ConfigManager
         ConfigManager& config = ConfigManager::instance();
+        m_currentSettings.useGlobalDefaults = true;  // No settings file means use global defaults
         m_currentSettings.silent = config.globalSilent();
         m_currentSettings.volume = config.globalVolume();
         m_currentSettings.noAutoMute = config.globalNoAutoMute();
@@ -1448,6 +1525,7 @@ bool PropertiesPanel::loadWallpaperSettings(const QString& wallpaperId)
     if (!doc.isObject()) {
         // Use global defaults from ConfigManager on parse error
         ConfigManager& config = ConfigManager::instance();
+        m_currentSettings.useGlobalDefaults = true;  // Parse error means use global defaults
         m_currentSettings.silent = config.globalSilent();
         m_currentSettings.volume = config.globalVolume();
         m_currentSettings.noAutoMute = config.globalNoAutoMute();
@@ -1478,7 +1556,11 @@ bool PropertiesPanel::loadWallpaperSettings(const QString& wallpaperId)
     ConfigManager& config = ConfigManager::instance();
     QJsonObject obj = doc.object();
     
-    // Use saved value if present, otherwise fall back to global default
+    // Load useGlobalDefaults flag first (defaults to true if not present)
+    m_currentSettings.useGlobalDefaults = obj.contains("useGlobalDefaults") ? obj["useGlobalDefaults"].toBool() : true;
+    
+    // If using global defaults, load all from config
+    // If custom settings, load from JSON with fallback to global defaults for missing fields
     m_currentSettings.silent = obj.contains("silent") ? obj["silent"].toBool() : config.globalSilent();
     m_currentSettings.volume = obj.contains("volume") ? obj["volume"].toInt() : config.globalVolume();
     m_currentSettings.noAutoMute = obj.contains("noAutoMute") ? obj["noAutoMute"].toBool() : config.globalNoAutoMute();
@@ -1565,6 +1647,7 @@ QStringList PropertiesPanel::getAvailableScreens() const
 void PropertiesPanel::updateSettingsControls()
 {
     // Block signals to prevent triggering onSettingChanged
+    m_useGlobalDefaultsCheckBox->blockSignals(true);
     m_silentCheckBox->blockSignals(true);
     m_volumeSlider->blockSignals(true);
     m_noAutoMuteCheckBox->blockSignals(true);
@@ -1589,12 +1672,39 @@ void PropertiesPanel::updateSettingsControls()
     m_logLevelCombo->blockSignals(true);
     m_mpvOptionsEdit->blockSignals(true);
     
+    // Update the useGlobalDefaults checkbox
+    m_useGlobalDefaultsCheckBox->setChecked(m_currentSettings.useGlobalDefaults);
+    
+    // Enable/disable all controls based on useGlobalDefaults flag
+    bool enableControls = !m_currentSettings.useGlobalDefaults;
+    m_silentCheckBox->setEnabled(enableControls);
+    m_volumeSlider->setEnabled(enableControls);
+    m_noAutoMuteCheckBox->setEnabled(enableControls);
+    m_noAudioProcessingCheckBox->setEnabled(enableControls);
+    m_fpsSpinBox->setEnabled(enableControls);
+    m_windowGeometryEdit->setEnabled(enableControls);
+    m_customScreenRootEdit->setEnabled(enableControls);
+    m_backgroundIdEdit->setEnabled(enableControls);
+    m_scalingCombo->setEnabled(enableControls);
+    m_clampingCombo->setEnabled(enableControls);
+    m_disableMouseCheckBox->setEnabled(enableControls);
+    m_disableParallaxCheckBox->setEnabled(enableControls);
+    m_noFullscreenPauseCheckBox->setEnabled(enableControls);
+    m_noLoopCheckBox->setEnabled(enableControls);
+    m_noHardwareDecodeCheckBox->setEnabled(enableControls);
+    m_forceX11CheckBox->setEnabled(enableControls);
+    m_forceWaylandCheckBox->setEnabled(enableControls);
+    m_verboseCheckBox->setEnabled(enableControls);
+    m_logLevelCombo->setEnabled(enableControls);
+    m_mpvOptionsEdit->setEnabled(enableControls);
+    
     // Update controls with current settings
     m_silentCheckBox->setChecked(m_currentSettings.silent);
     m_volumeSlider->setValue(m_currentSettings.volume);
-    m_volumeLabel->setText(QString("%1%").arg(m_currentSettings.volume));
+    m_volumeSpinBox->setValue(m_currentSettings.volume);
     m_noAutoMuteCheckBox->setChecked(m_currentSettings.noAutoMute);
     m_noAudioProcessingCheckBox->setChecked(m_currentSettings.noAudioProcessing);
+    m_fpsSpinBox->setValue(m_currentSettings.fps);
     m_fpsSpinBox->setValue(m_currentSettings.fps);
     m_windowGeometryEdit->setText(m_currentSettings.windowGeometry);
     // Handle screen root settings in the correct order
@@ -1613,7 +1723,7 @@ void PropertiesPanel::updateSettingsControls()
             m_screenRootCombo->setCurrentText(savedScreen);
         }
     }
-    m_screenRootCombo->setEnabled(m_currentSettings.customScreenRoot.isEmpty());  // Must be after setting custom screen root
+    m_screenRootCombo->setEnabled(m_currentSettings.customScreenRoot.isEmpty() && enableControls);  // Must be after setting custom screen root
     m_backgroundIdEdit->setText(m_currentSettings.backgroundId);
     m_scalingCombo->setCurrentText(m_currentSettings.scaling);
     m_clampingCombo->setCurrentText(m_currentSettings.clamping);
@@ -1631,6 +1741,7 @@ void PropertiesPanel::updateSettingsControls()
     m_mpvOptionsEdit->setText(m_currentSettings.mpvOptions);
     
     // Re-enable signals
+    m_useGlobalDefaultsCheckBox->blockSignals(false);
     m_silentCheckBox->blockSignals(false);
     m_volumeSlider->blockSignals(false);
     m_noAutoMuteCheckBox->blockSignals(false);
