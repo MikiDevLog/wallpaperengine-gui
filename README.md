@@ -13,8 +13,9 @@ In short - will allow to run regular media files in full compatibility with regu
 - Support QT Themes for KDE users.
 - Somewhat usable in terms of design (but now even better).
 - Restore previous state on restart.
+- Global settings
 - Has playlist support
-- Has support for changing wallpaper properties that are specified in project.json with the ability to save them between launches and roll back to the default state
+- Has support for changing wallpaper properties that are specified in project.json with the ability to save them between launches and roll back to the default state **(realy depends on linux-wallpaperengine since it wont support every wallpaper as of now, and some wallpaper wont react to any change at all since they use advnaced WE specific features that are not implemented currently)**
 - Has support for individual settings (settings specific to linux-wallpaperengine) for running wallpapers
 - Has support for working in the system tray
 
@@ -30,7 +31,7 @@ In short - will allow to run regular media files in full compatibility with regu
 ## Prerequisites
 
 [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine)
-You need binary (~/build/output/linux-wallpaperengine) compiled. Go to link above for the instructions. **And make sure you are using the correct DE and composer and installed all dependencies from his instruction pls tm.**
+You need binary (~/build/output/linux-wallpaperengine) compiled. Go to link above for the instructions. **And make sure you are using the correct DE and composer and installed all dependencies from his instruction.**
 
 ### Fedora / RHEL / CentOS
 ```bash
@@ -67,7 +68,7 @@ cd wallpaperengine-gui
 mkdir build && cd build
 cmake ..
 make -j$(nproc)
-sudo make install
+sudo make install # But only you want it to be visible in yours app manager.
 ```
 
 ## Usage
@@ -170,21 +171,8 @@ src/
     └── WallpaperPlaylist.*# Playlist management logic
 ```
 
-### Adding Features
-1. Create & Add
-2. Add files to `CMakeLists.txt` SOURCES/HEADERS lists if needed
-3. Build & Test
-
-### Contributing
-1. Fork the repository
-2. Create a feature branch
-3. Make changes and test thoroughly
-4. Update documentation if needed
-5. Submit a pull request
-
 ### TODO
 
-1. Kill this
-2. Make GUI better
-3. Clean the code
-4. ?
+1. Add multimonitor mode
+2. Release rpm apt and other packages for the application
+3. Focus on QoL features if any will be suggested
