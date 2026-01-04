@@ -1123,7 +1123,7 @@ QWidget* PropertiesPanel::createPropertyWidget(const QString& propName, const QS
         layout->setSpacing(12);
         
         auto* slider = new QSlider(Qt::Horizontal);
-        auto* label = new QLabel;
+        auto* spinBox = new QDoubleSpinBox;
         
         double minVal = propertyObj.value("min").toDouble(0.0);
         double maxVal = propertyObj.value("max").toDouble(100.0);
@@ -1134,26 +1134,39 @@ QWidget* PropertiesPanel::createPropertyWidget(const QString& propName, const QS
         slider->setValue(static_cast<int>((value.toDouble() - minVal) / step));
         slider->setMinimumWidth(150);
         slider->setMinimumHeight(28);
+        slider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         
         // Store metadata for value calculation
         slider->setProperty("minValue", minVal);
         slider->setProperty("maxValue", maxVal);
         slider->setProperty("step", step);
         
-        label->setText(QString::number(value.toDouble(), 'f', 2));
-        label->setMinimumWidth(60);
-        label->setMinimumHeight(28);
-        label->setAlignment(Qt::AlignCenter);
-        label->setStyleSheet("border: 1px solid #c0c0c0; padding: 4px; background: white;");
+        spinBox->setRange(minVal, maxVal);
+        spinBox->setSingleStep(step);
+        spinBox->setValue(value.toDouble());
+        spinBox->setDecimals(2);
+        spinBox->setMinimumWidth(80);
+        spinBox->setMinimumHeight(28);
+        spinBox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         
         connect(slider, &QSlider::valueChanged, this, [=](int val) {
             double realValue = minVal + (val * step);
-            label->setText(QString::number(realValue, 'f', 2));
+            spinBox->blockSignals(true);
+            spinBox->setValue(realValue);
+            spinBox->blockSignals(false);
+            onPropertyChanged();
+        });
+        
+        connect(spinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [=](double val) {
+            int sliderVal = static_cast<int>((val - minVal) / step);
+            slider->blockSignals(true);
+            slider->setValue(sliderVal);
+            slider->blockSignals(false);
             onPropertyChanged();
         });
         
         layout->addWidget(slider);
-        layout->addWidget(label);
+        layout->addWidget(spinBox);
         
         container->setProperty("propertyType", type);  // Store the type
         widget = container;
