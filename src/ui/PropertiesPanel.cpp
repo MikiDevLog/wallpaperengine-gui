@@ -1617,8 +1617,7 @@ QStringList PropertiesPanel::getAvailableScreens() const
             .arg(primaryName)
             .arg(primaryScreen->geometry().width())
             .arg(primaryScreen->geometry().height());
-        screens << primaryName;  // Add raw name for compatibility
-        screens << primaryInfo;  // Add descriptive version
+        screens << primaryInfo;  // Add descriptive version with resolution
     }
 
     // Add other screens with resolution info
@@ -1629,16 +1628,9 @@ QStringList PropertiesPanel::getAvailableScreens() const
                 .arg(screenName)
                 .arg(screen->geometry().width())
                 .arg(screen->geometry().height());
-            screens << screenName;  // Add raw name for compatibility
-            screens << screenInfo;  // Add descriptive version
+            screens << screenInfo;  // Add descriptive version with resolution
         }
     }
-
-    // Add common fallback names that wallpaper-engine might expect
-    if (!screens.contains("HDMI-A-1")) screens << "HDMI-A-1";
-    if (!screens.contains("HDMI-1")) screens << "HDMI-1";
-    if (!screens.contains("DP-1")) screens << "DP-1";
-    if (!screens.contains("eDP-1")) screens << "eDP-1";
 
     qCDebug(propertiesPanel) << "Available screens:" << screens;
     return screens;

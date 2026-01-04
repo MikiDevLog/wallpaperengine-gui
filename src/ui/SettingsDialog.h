@@ -107,7 +107,7 @@ private:
     // Audio settings
     QCheckBox* m_globalSilentCheckBox;
     QSlider* m_globalVolumeSlider;
-    QLabel* m_globalVolumeLabel;
+    QSpinBox* m_globalVolumeSpinBox;
     QCheckBox* m_globalNoAutoMuteCheckBox;
     QCheckBox* m_globalNoAudioProcessingCheckBox;
     

@@ -467,17 +467,24 @@ QWidget* SettingsDialog::createEngineDefaultsTab()
     m_globalVolumeSlider->setMinimumHeight(28);
     m_globalVolumeSlider->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     
-    m_globalVolumeLabel = new QLabel("15%");
-    m_globalVolumeLabel->setMinimumWidth(50);
-    m_globalVolumeLabel->setMinimumHeight(28);
-    m_globalVolumeLabel->setAlignment(Qt::AlignCenter);
-    m_globalVolumeLabel->setStyleSheet("border: 1px solid #c0c0c0; padding: 4px; background: white;");
+    m_globalVolumeSpinBox = new QSpinBox;
+    m_globalVolumeSpinBox->setRange(0, 100);
+    m_globalVolumeSpinBox->setValue(15);
+    m_globalVolumeSpinBox->setSuffix("%");
+    m_globalVolumeSpinBox->setMinimumWidth(80);
+    m_globalVolumeSpinBox->setMinimumHeight(28);
+    m_globalVolumeSpinBox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     
     volumeLayout->addWidget(m_globalVolumeSlider);
-    volumeLayout->addWidget(m_globalVolumeLabel);
+    volumeLayout->addWidget(m_globalVolumeSpinBox);
     
     connect(m_globalVolumeSlider, &QSlider::valueChanged, this, [this](int value) {
-        m_globalVolumeLabel->setText(QString("%1%").arg(value));
+        m_globalVolumeSpinBox->setValue(value);
+        onGlobalSettingChanged();
+    });
+    
+    connect(m_globalVolumeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
+        m_globalVolumeSlider->setValue(value);
         onGlobalSettingChanged();
     });
     
@@ -890,7 +897,7 @@ void SettingsDialog::loadSettings()
     // Load Engine Defaults settings
     m_globalSilentCheckBox->setChecked(m_config.globalSilent());
     m_globalVolumeSlider->setValue(m_config.globalVolume());
-    m_globalVolumeLabel->setText(QString("%1%").arg(m_config.globalVolume()));
+    m_globalVolumeSpinBox->setValue(m_config.globalVolume());
     m_globalNoAutoMuteCheckBox->setChecked(m_config.globalNoAutoMute());
     m_globalNoAudioProcessingCheckBox->setChecked(m_config.globalNoAudioProcessing());
     m_globalFpsSpinBox->setValue(m_config.globalFps());
