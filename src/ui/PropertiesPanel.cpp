@@ -168,6 +168,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_propertiesModified(false)
     , m_settingsModified(false)
     , m_isWallpaperRunning(false)
+    , m_isMultiMonitorMode(false)
     , m_ignoreTabChange(false)
     , m_userInteractingWithTabs(false)
     , m_idSection(nullptr)
@@ -375,6 +376,7 @@ void PropertiesPanel::setupUI()
        // Launch button section
        auto* launchLayout = new QHBoxLayout;
        launchLayout->setContentsMargins(0, 8, 0, 0);
+       m_launchButton->setObjectName("applyWallpaperButton");
        m_launchButton->setMinimumHeight(36);
        m_launchButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
        launchLayout->addStretch();
@@ -849,6 +851,12 @@ void PropertiesPanel::setWallpaper(const WallpaperInfo& wallpaper)
     
     // Update WNEL-specific settings visibility
     updateWNELSettingsVisibility(isExternalWallpaper);
+    
+    // Reapply multi-monitor mode state (if active, re-disable the tabs)
+    if (m_isMultiMonitorMode) {
+        m_innerTabWidget->setTabEnabled(1, false);  // Wallpaper/External Settings
+        m_innerTabWidget->setTabEnabled(2, false);  // Engine Settings
+    }
     
     // Update UI visibility based on wallpaper type
     updateUIVisibilityForWallpaperType(isExternalWallpaper);
@@ -2828,4 +2836,41 @@ QString PropertiesPanel::getExternalWallpaperFilePath(const QString& wallpaperId
     
     // Return the original file path if available
     return filePath;
+}
+
+void PropertiesPanel::setMultiMonitorMode(bool enabled)
+{
+    m_isMultiMonitorMode = enabled;  // Store the state
+    
+    // Disable both Wallpaper Settings and Engine Settings tabs when multi-monitor mode is active
+    if (m_innerTabWidget) {
+        int wallpaperSettingsTabIndex = 1;  // Wallpaper Settings is the second tab
+        int engineSettingsTabIndex = 2;     // Engine Settings is the third tab
+        
+        m_innerTabWidget->setTabEnabled(wallpaperSettingsTabIndex, !enabled);
+        m_innerTabWidget->setTabEnabled(engineSettingsTabIndex, !enabled);
+        
+        if (enabled) {
+            m_innerTabWidget->setTabToolTip(wallpaperSettingsTabIndex, 
+                "Wallpaper Settings are disabled in Multi-Monitor mode.");
+            m_innerTabWidget->setTabToolTip(engineSettingsTabIndex, 
+                "Engine Settings are disabled in Multi-Monitor mode. Use Engine Defaults from Settings instead.");
+            
+            // If currently on a disabled tab, switch to Details tab
+            int currentIndex = m_innerTabWidget->currentIndex();
+            if (currentIndex == wallpaperSettingsTabIndex || currentIndex == engineSettingsTabIndex) {
+                m_innerTabWidget->setCurrentIndex(0);  // Details tab
+            }
+        } else {
+            m_innerTabWidget->setTabToolTip(wallpaperSettingsTabIndex, 
+                "Configure wallpaper-specific settings");
+            m_innerTabWidget->setTabToolTip(engineSettingsTabIndex, 
+                "Configure wallpaper-specific engine settings");
+        }
+    }
+    
+    // Hide Launch Wallpaper button in multi-monitor mode
+    if (m_launchButton) {
+        m_launchButton->setVisible(!enabled);
+    }
 }

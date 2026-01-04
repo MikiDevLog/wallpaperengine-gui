@@ -390,6 +390,115 @@ QString WallpaperManager::getCurrentWallpaper() const
     return m_currentWallpaperId;
 }
 
+bool WallpaperManager::launchMultiMonitorWallpaper(const QMap<QString, QString>& screenAssignments)
+{
+    if (screenAssignments.isEmpty()) {
+        emit errorOccurred("No screen assignments provided");
+        return false;
+    }
+    
+    ConfigManager& config = ConfigManager::instance();
+    QString binaryPath = config.wallpaperEnginePath();
+    
+    if (binaryPath.isEmpty()) {
+        emit errorOccurred("Wallpaper Engine binary path not configured");
+        return false;
+    }
+    
+    // Stop current wallpaper if running
+    stopWallpaper();
+    
+    // Create new process
+    m_wallpaperProcess = new QProcess(this);
+    connect(m_wallpaperProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &WallpaperManager::onProcessFinished);
+    connect(m_wallpaperProcess, &QProcess::errorOccurred,
+            this, &WallpaperManager::onProcessError);
+    connect(m_wallpaperProcess, &QProcess::readyReadStandardOutput,
+            this, &WallpaperManager::onProcessOutput);
+    connect(m_wallpaperProcess, &QProcess::readyReadStandardError,
+            this, &WallpaperManager::onProcessOutput);
+    
+    // Build command line arguments using Engine Defaults
+    QStringList args;
+    
+    // Add global audio settings
+    if (config.globalSilent()) args << "--silent";
+    
+    int volume = config.globalVolume();
+    if (volume != 15) args << "--volume" << QString::number(volume);
+    
+    if (config.globalNoAutoMute()) args << "--noautomute";
+    if (config.globalNoAudioProcessing()) args << "--no-audio-processing";
+    
+    // Add global performance settings
+    int fps = config.globalFps();
+    if (fps != 30) args << "--fps" << QString::number(fps);
+    
+    // Add global display settings (not screen-root/window-geometry, those are per-screen)
+    QString scaling = config.globalScaling();
+    if (scaling != "default") args << "--scaling" << scaling;
+    
+    QString clamping = config.globalClamping();
+    if (clamping != "clamp") args << "--clamping" << clamping;
+    
+    // Add global behavior settings
+    if (config.globalDisableMouse()) args << "--disable-mouse";
+    if (config.globalDisableParallax()) args << "--disable-parallax";
+    if (config.globalNoFullscreenPause()) args << "--no-fullscreen-pause";
+    
+    // Add assets directory
+    QString assetsDir = config.getAssetsDir();
+    if (!assetsDir.isEmpty()) {
+        args << "--assets-dir" << assetsDir;
+    }
+    
+    // Add screen-root and --bg pairs for each screen assignment
+    for (auto it = screenAssignments.constBegin(); it != screenAssignments.constEnd(); ++it) {
+        QString screenName = it.key();
+        QString wallpaperId = it.value();
+        
+        WallpaperInfo wallpaper = getWallpaperById(wallpaperId);
+        if (wallpaper.id.isEmpty()) {
+            emit errorOccurred("Wallpaper not found: " + wallpaperId);
+            delete m_wallpaperProcess;
+            m_wallpaperProcess = nullptr;
+            return false;
+        }
+        
+        args << "--screen-root" << screenName;
+        args << "--bg" << wallpaper.path;
+    }
+    
+    emit outputReceived(QString("Launching multi-monitor wallpaper setup (%1 screens)")
+                       .arg(screenAssignments.size()));
+    emit outputReceived(QString("Command: %1 %2").arg(binaryPath, args.join(" ")));
+    
+    // Set working directory
+    QFileInfo binaryInfo(binaryPath);
+    QString workingDir = binaryInfo.absolutePath();
+    m_wallpaperProcess->setWorkingDirectory(workingDir);
+    
+    // Preserve the current environment
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    m_wallpaperProcess->setProcessEnvironment(env);
+    
+    // Start process
+    m_wallpaperProcess->start(binaryPath, args);
+    
+    if (!m_wallpaperProcess->waitForStarted(5000)) {
+        emit errorOccurred("Failed to start wallpaper process");
+        delete m_wallpaperProcess;
+        m_wallpaperProcess = nullptr;
+        return false;
+    }
+    
+    // Store first wallpaper ID as current (for tracking purposes)
+    m_currentWallpaperId = screenAssignments.values().first();
+    emit wallpaperLaunched(m_currentWallpaperId);
+    return true;
+}
+
 void WallpaperManager::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     emit outputReceived(QString("Wallpaper process finished (exit code: %1, status: %2)")

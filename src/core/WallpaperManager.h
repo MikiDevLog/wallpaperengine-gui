@@ -50,6 +50,9 @@ public:
     void stopWallpaper();
     bool isWallpaperRunning() const;
     QString getCurrentWallpaper() const;
+    
+    // Multi-monitor mode
+    bool launchMultiMonitorWallpaper(const QMap<QString, QString>& screenAssignments);
 
 signals:
     void refreshProgress(int current, int total);

@@ -2,6 +2,7 @@
 #include "../widgets/WallpaperPreview.h"
 #include "PropertiesPanel.h"
 #include "../widgets/PlaylistPreview.h"
+#include "../widgets/ScreenSelectionWidget.h"
 #include "../playlist/WallpaperPlaylist.h"
 #include "SettingsDialog.h"
 #include "../core/ConfigManager.h"
@@ -192,6 +193,8 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_mainTabWidget(nullptr)
     , m_splitter(nullptr)
+    , m_screenSelectionWidget(nullptr)
+    , m_multiMonitorApplyButton(nullptr)
     , m_wallpaperPreview(nullptr)
     , m_propertiesPanel(nullptr)
     , m_playlistPreview(nullptr)
@@ -391,11 +394,24 @@ void MainWindow::createCentralWidget()
     
     // Create "All Wallpapers" tab
     QWidget* allWallpapersTab = new QWidget;
-    QHBoxLayout* allWallpapersLayout = new QHBoxLayout(allWallpapersTab);
-    allWallpapersLayout->setContentsMargins(0, 0, 0, 0);
+    QVBoxLayout* allWallpapersMainLayout = new QVBoxLayout(allWallpapersTab);
+    allWallpapersMainLayout->setContentsMargins(0, 0, 0, 0);
+    allWallpapersMainLayout->setSpacing(0);
+    
+    // Add screen selection widget for multi-monitor mode
+    m_screenSelectionWidget = new ScreenSelectionWidget;
+    m_screenSelectionWidget->setVisible(false);  // Hidden by default
+    allWallpapersMainLayout->addWidget(m_screenSelectionWidget);
+    
+    // Add splitter container
+    QWidget* splitterContainer = new QWidget;
+    QHBoxLayout* splitterLayout = new QHBoxLayout(splitterContainer);
+    splitterLayout->setContentsMargins(0, 0, 0, 0);
     
     m_splitter = new QSplitter(Qt::Horizontal);
-    allWallpapersLayout->addWidget(m_splitter);
+    splitterLayout->addWidget(m_splitter);
+    
+    allWallpapersMainLayout->addWidget(splitterContainer, 1);
 
     // left: wallpaper preview with playlist buttons
     QWidget* leftWidget = new QWidget;
@@ -430,12 +446,18 @@ void MainWindow::createCentralWidget()
     m_toggleHiddenButton->setCheckable(true);
     m_toggleHiddenButton->setToolTip("Toggle visibility of hidden wallpapers");
     
+    // Multi-monitor apply button (hidden by default)
+    m_multiMonitorApplyButton = new QPushButton("Apply Multi-Monitor Setup");
+    m_multiMonitorApplyButton->setVisible(false);
+    m_multiMonitorApplyButton->setToolTip("Launch wallpapers on all configured screens");
+    
     playlistButtonsLayout->addWidget(m_addToPlaylistButton);
     playlistButtonsLayout->addWidget(m_removeFromPlaylistButton);
     playlistButtonsLayout->addWidget(m_addCustomWallpaperButton);
     playlistButtonsLayout->addWidget(m_stopWallpaperButton);
     playlistButtonsLayout->addWidget(m_deleteExternalButton);
     playlistButtonsLayout->addWidget(m_toggleHiddenButton);
+    playlistButtonsLayout->addWidget(m_multiMonitorApplyButton);
     playlistButtonsLayout->addStretch();
     
     leftLayout->addLayout(playlistButtonsLayout);
@@ -498,6 +520,11 @@ void MainWindow::createCentralWidget()
     connect(m_stopWallpaperButton, &QPushButton::clicked, this, &MainWindow::onStopWallpaperClicked);
     connect(m_deleteExternalButton, &QPushButton::clicked, this, &MainWindow::onDeleteExternalWallpaperClicked);
     connect(m_toggleHiddenButton, &QPushButton::clicked, this, &MainWindow::onToggleHiddenWallpapersClicked);
+    
+    // Connect multi-monitor signals
+    connect(m_multiMonitorApplyButton, &QPushButton::clicked, this, &MainWindow::onMultiMonitorApply);
+    connect(m_screenSelectionWidget, &ScreenSelectionWidget::screenSelected, 
+            this, &MainWindow::onScreenSelectionChanged);
     
     // Connect playlist preview signals
     connect(m_playlistPreview, &PlaylistPreview::wallpaperSelected, this, &MainWindow::onPlaylistWallpaperSelected);
@@ -601,6 +628,9 @@ void MainWindow::loadSettings()
         m_toggleHiddenButton->setToolTip(m_showHiddenWallpapers ? 
             "Hide wallpapers marked as hidden" : "Show wallpapers marked as hidden");
     }
+    
+    // Update multi-monitor UI based on saved settings
+    updateMultiMonitorUI();
 }
 
 void MainWindow::saveSettings()
@@ -967,17 +997,28 @@ void MainWindow::initializeWithValidConfig()
     // Start automatic wallpaper refresh
     qCInfo(mainWindow) << "Starting automatic wallpaper refresh";
     m_statusLabel->setText("Initializing... Loading wallpapers");
+    
+    // Update multi-monitor UI state on startup
+    updateMultiMonitorUI();
+    
     QTimer::singleShot(500, this, &MainWindow::refreshWallpapers);
     
     // Auto-restore last wallpaper or playlist state
     QString lastWallpaper = m_config.lastSelectedWallpaper();
     bool lastSessionUsedPlaylist = m_config.lastSessionUsedPlaylist();
-    qCDebug(mainWindow) << "Checking for last state to restore. Wallpaper:" << (lastWallpaper.isEmpty() ? "NONE" : lastWallpaper) 
-                       << "Used playlist:" << lastSessionUsedPlaylist;
+    bool isMultiMonitorMode = m_config.multiMonitorModeEnabled();
+    QMap<QString, QString> multiMonitorAssignments = m_config.multiMonitorScreenAssignments();
     
-    // Check if we need to restore state (either specific wallpaper or playlist-only)
-    if (!lastWallpaper.isEmpty() || lastSessionUsedPlaylist) {
-        if (!lastWallpaper.isEmpty()) {
+    qCDebug(mainWindow) << "Checking for last state to restore. Wallpaper:" << (lastWallpaper.isEmpty() ? "NONE" : lastWallpaper) 
+                       << "Used playlist:" << lastSessionUsedPlaylist
+                       << "Multi-monitor:" << isMultiMonitorMode
+                       << "Assignments:" << multiMonitorAssignments.size();
+    
+    // Check if we need to restore state (wallpaper, playlist, or multi-monitor)
+    if (!lastWallpaper.isEmpty() || lastSessionUsedPlaylist || (isMultiMonitorMode && !multiMonitorAssignments.isEmpty())) {
+        if (isMultiMonitorMode && !multiMonitorAssignments.isEmpty()) {
+            qCInfo(mainWindow) << "Will restore multi-monitor setup with" << multiMonitorAssignments.size() << "screen assignments";
+        } else if (!lastWallpaper.isEmpty()) {
             qCInfo(mainWindow) << "Will restore last wallpaper:" << lastWallpaper << "from" << (lastSessionUsedPlaylist ? "playlist" : "individual selection");
         } else if (lastSessionUsedPlaylist) {
             qCInfo(mainWindow) << "Will restore playlist playback (no specific wallpaper ID saved)";
@@ -985,7 +1026,7 @@ void MainWindow::initializeWithValidConfig()
         
         // Store restoration state to be processed after WallpaperManager::refreshFinished signal
         m_pendingPlaylistRestore = true;
-        m_pendingRestoreWallpaperId = lastWallpaper; // May be empty for playlist-only restoration
+        m_pendingRestoreWallpaperId = lastWallpaper; // May be empty for playlist-only or multi-monitor restoration
         m_pendingRestoreFromPlaylist = lastSessionUsedPlaylist;
         
         qCDebug(mainWindow) << "Restoration state stored, will restore after wallpapers are loaded";
@@ -1039,11 +1080,30 @@ void MainWindow::showConfigurationIssuesDialog(const QString& issues)
 void MainWindow::openSettings()
 {
     bool wasConfigValid = m_config.isConfigurationValid();
+    bool wasMultiMonitorMode = m_config.multiMonitorModeEnabled();
     
     SettingsDialog dialog(this);
     if (dialog.exec() == QDialog::Accepted) {
         // Settings were saved, update status
         updateStatusBar();
+        
+        // Check if multi-monitor mode changed
+        bool isMultiMonitorMode = m_config.multiMonitorModeEnabled();
+        if (wasMultiMonitorMode != isMultiMonitorMode) {
+            // Mode changed, stop any running wallpapers/playlist
+            if (m_wallpaperManager) {
+                m_wallpaperManager->stopWallpaper();
+            }
+            if (m_wnelAddon) {
+                m_wnelAddon->stopWallpaper();
+            }
+            if (m_wallpaperPlaylist) {
+                m_wallpaperPlaylist->stopPlayback();
+            }
+        }
+        
+        // Update multi-monitor UI in case mode was changed
+        updateMultiMonitorUI();
         
         bool isConfigValid = m_config.isConfigurationValid();
         
@@ -1168,6 +1228,46 @@ void MainWindow::onRefreshFinished()
         qCDebug(mainWindow) << "Processing pending playlist restoration. Wallpaper ID:" << (m_pendingRestoreWallpaperId.isEmpty() ? "NONE" : m_pendingRestoreWallpaperId) 
                            << "From playlist:" << m_pendingRestoreFromPlaylist;
         
+        // Check if multi-monitor mode is active and has assignments
+        if (m_config.multiMonitorModeEnabled()) {
+            QMap<QString, QString> savedAssignments = m_config.multiMonitorScreenAssignments();
+            if (!savedAssignments.isEmpty()) {
+                qCInfo(mainWindow) << "Restoring multi-monitor setup with" << savedAssignments.size() << "screen assignments";
+                
+                // Auto-launch multi-monitor setup
+                if (m_wallpaperManager && m_wallpaperManager->launchMultiMonitorWallpaper(savedAssignments)) {
+                    m_statusLabel->setText(QString("Restored multi-monitor setup (%1 screens)").arg(savedAssignments.size()));
+                    
+                    // Update button states to enable Stop Wallpaper button
+                    updatePlaylistButtonStates();
+                    
+                    // Restore visual state in screen selection widget
+                    if (m_screenSelectionWidget) {
+                        for (auto it = savedAssignments.constBegin(); it != savedAssignments.constEnd(); ++it) {
+                            QString technicalName = it.key();
+                            QString wallpaperId = it.value();
+                            
+                            // Get wallpaper info and preview
+                            auto wallpaperInfo = m_wallpaperManager->getWallpaperInfo(wallpaperId);
+                            if (wallpaperInfo.has_value()) {
+                                QPixmap preview = QPixmap(wallpaperInfo->previewPath);
+                                m_screenSelectionWidget->setScreenWallpaper(technicalName, wallpaperId, 
+                                                                             wallpaperInfo->name, preview);
+                            }
+                        }
+                    }
+                } else {
+                    qCWarning(mainWindow) << "Failed to restore multi-monitor setup";
+                }
+                
+                // Clear pending restoration
+                m_pendingPlaylistRestore = false;
+                m_pendingRestoreWallpaperId.clear();
+                m_pendingRestoreFromPlaylist = false;
+                return;
+            }
+        }
+        
         if (m_pendingRestoreFromPlaylist && m_wallpaperPlaylist) {
             // Check if playlist is enabled and has wallpapers
             PlaylistSettings playlistSettings = m_wallpaperPlaylist->getSettings();
@@ -1255,6 +1355,26 @@ void MainWindow::onWallpaperSelected(const WallpaperInfo& wallpaper)
             
             // Set the current wallpaper ID for button states and operations
             m_currentWallpaperId = wallpaper.id;
+            
+            // In multi-monitor mode, assign wallpaper to selected screen
+            if (m_config.multiMonitorModeEnabled() && m_screenSelectionWidget) {
+                QString selectedScreen = m_screenSelectionWidget->getSelectedScreen();
+                if (!selectedScreen.isEmpty()) {
+                    QPixmap preview = QPixmap(wallpaper.previewPath);
+                    m_screenSelectionWidget->setScreenWallpaper(selectedScreen, wallpaper.id, 
+                                                                 wallpaper.name, preview);
+                    
+                    // Save assignment to config
+                    QMap<QString, QString> currentAssignments = m_config.multiMonitorScreenAssignments();
+                    currentAssignments[selectedScreen] = wallpaper.id;
+                    m_config.setMultiMonitorScreenAssignments(currentAssignments);
+                    
+                    m_statusLabel->setText(QString("Assigned '%1' to screen %2")
+                        .arg(wallpaper.name).arg(selectedScreen));
+                    qCDebug(mainWindow) << "Assigned wallpaper to screen in multi-monitor mode";
+                    // Continue to show properties panel below
+                }
+            }
             
             // For external wallpapers, validate they still exist before setting
             if (wallpaper.type == "External") {
@@ -2169,6 +2289,196 @@ void MainWindow::onToggleHiddenWallpapersClicked()
     
     // Save the setting to config
     m_config.setValue("ui/showHiddenWallpapers", m_showHiddenWallpapers);
+}
+
+// Multi-Monitor mode methods
+void MainWindow::onMultiMonitorModeChanged()
+{
+    // Stop any currently running wallpapers when mode changes
+    if (m_wallpaperManager) {
+        m_wallpaperManager->stopWallpaper();
+    }
+    if (m_wnelAddon) {
+        m_wnelAddon->stopWallpaper();
+    }
+    if (m_wallpaperPlaylist) {
+        m_wallpaperPlaylist->stopPlayback();
+    }
+    
+    updateMultiMonitorUI();
+}
+
+void MainWindow::updateMultiMonitorUI()
+{
+    bool multiMonitorMode = m_config.multiMonitorModeEnabled();
+    
+    // Show/hide screen selection widget
+    if (m_screenSelectionWidget) {
+        m_screenSelectionWidget->setVisible(multiMonitorMode);
+        if (multiMonitorMode) {
+            m_screenSelectionWidget->updateScreens();
+            m_screenSelectionWidget->updateGeometry();  // Force layout update
+            
+            // Restore saved assignments
+            QMap<QString, QString> savedAssignments = m_config.multiMonitorScreenAssignments();
+            for (auto it = savedAssignments.constBegin(); it != savedAssignments.constEnd(); ++it) {
+                QString technicalName = it.key();
+                QString wallpaperId = it.value();
+                
+                // Get wallpaper info and preview
+                if (m_wallpaperManager) {
+                    auto wallpaperInfo = m_wallpaperManager->getWallpaperInfo(wallpaperId);
+                    if (wallpaperInfo.has_value()) {
+                        QPixmap preview = QPixmap(wallpaperInfo->previewPath);
+                        m_screenSelectionWidget->setScreenWallpaper(technicalName, wallpaperId, 
+                                                                     wallpaperInfo->name, preview);
+                        continue;
+                    }
+                }
+                
+                // Try external wallpapers
+                if (m_wnelAddon) {
+                    QList<ExternalWallpaperInfo> externalWallpapers = m_wnelAddon->getAllExternalWallpapers();
+                    for (const ExternalWallpaperInfo& external : externalWallpapers) {
+                        if (external.id == wallpaperId) {
+                            QPixmap preview = QPixmap(external.previewPath);
+                            m_screenSelectionWidget->setScreenWallpaper(technicalName, wallpaperId, 
+                                                                         external.name, preview);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Show/hide appropriate buttons based on mode
+    if (m_multiMonitorApplyButton) {
+        m_multiMonitorApplyButton->setVisible(multiMonitorMode);
+    }
+    
+    // Disable Apply Wallpaper button in multi-monitor mode
+    if (m_wallpaperPreview) {
+        m_wallpaperPreview->setApplyButtonEnabled(!multiMonitorMode);
+    }
+    
+    // Hide Wallpaper Playlist tab in multi-monitor mode
+    if (m_mainTabWidget) {
+        int playlistTabIndex = 1;  // Wallpaper Playlist is the second tab
+        m_mainTabWidget->setTabVisible(playlistTabIndex, !multiMonitorMode);
+        
+        // If currently on playlist tab and entering multi-monitor mode, switch to All Wallpapers
+        if (multiMonitorMode && m_mainTabWidget->currentIndex() == playlistTabIndex) {
+            m_mainTabWidget->setCurrentIndex(0);
+        }
+    }
+    
+    // Disable playlist buttons when multi-monitor mode is active
+    if (m_addToPlaylistButton) m_addToPlaylistButton->setVisible(!multiMonitorMode);
+    if (m_removeFromPlaylistButton) m_removeFromPlaylistButton->setVisible(!multiMonitorMode);
+    if (m_addCustomWallpaperButton) m_addCustomWallpaperButton->setEnabled(!multiMonitorMode);
+    
+    // Disable double-click quick apply on wallpaper preview
+    if (m_wallpaperPreview) {
+        m_wallpaperPreview->setDoubleClickEnabled(!multiMonitorMode);
+    }
+    
+    // Update properties panel to disable engine settings in multi-monitor mode
+    if (m_propertiesPanel) {
+        m_propertiesPanel->setMultiMonitorMode(multiMonitorMode);
+    }
+}
+
+void MainWindow::onScreenSelectionChanged(const QString& technicalName)
+{
+    qCDebug(mainWindow) << "Screen selected:" << technicalName;
+    // Nothing special to do here, just wait for user to select a wallpaper
+}
+
+void MainWindow::onMultiMonitorApply()
+{
+    if (!m_screenSelectionWidget) return;
+    
+    QMap<QString, QString> assignments = m_screenSelectionWidget->getScreenAssignments();
+    
+    // Check if all screens have wallpapers assigned
+    if (!m_screenSelectionWidget->areAllScreensAssigned()) {
+        int assignedCount = assignments.size();
+        int totalScreens = m_screenSelectionWidget->getScreenCount();
+        
+        if (assignedCount == 0) {
+            QMessageBox::warning(this, "No Wallpapers Assigned",
+                "Please assign wallpapers to at least one screen before applying.");
+            return;
+        }
+        
+        // Prompt user for action
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle("Incomplete Screen Assignment");
+        msgBox.setText(QString("You have assigned wallpapers to %1 out of %2 screens.")
+                       .arg(assignedCount).arg(totalScreens));
+        msgBox.setInformativeText("What would you like to do?");
+        
+        QPushButton *applyAllButton = msgBox.addButton("Apply Same Wallpaper to All Screens", 
+                                                        QMessageBox::ActionRole);
+        QPushButton *continueButton = msgBox.addButton("Continue Populating", 
+                                                       QMessageBox::ActionRole);
+        QPushButton *cancelButton = msgBox.addButton(QMessageBox::Cancel);
+        
+        msgBox.exec();
+        
+        if (msgBox.clickedButton() == cancelButton) {
+            return;
+        } else if (msgBox.clickedButton() == applyAllButton) {
+            // Get the first assigned wallpaper
+            QString wallpaperId = assignments.values().first();
+            
+            // Apply to all screens
+            ConfigManager& config = ConfigManager::instance();
+            QStringList screenOrder = config.multiMonitorScreenOrder();
+            for (const QString& screen : screenOrder) {
+                assignments[screen] = wallpaperId;
+            }
+            
+            // Update UI to show all screens have the same wallpaper
+            if (m_wallpaperManager) {
+                auto wallpaperInfo = m_wallpaperManager->getWallpaperInfo(wallpaperId);
+                if (wallpaperInfo.has_value()) {
+                    QPixmap preview = QPixmap(wallpaperInfo->previewPath);
+                    for (const QString& screen : screenOrder) {
+                        m_screenSelectionWidget->setScreenWallpaper(screen, wallpaperId, 
+                                                                     wallpaperInfo->name, preview);
+                    }
+                }
+            }
+        } else if (msgBox.clickedButton() == continueButton) {
+            // User wants to continue populating, just return
+            return;
+        }
+    }
+    
+    // Stop any currently running wallpapers
+    if (m_wallpaperManager) {
+        m_wallpaperManager->stopWallpaper();
+    }
+    if (m_wnelAddon) {
+        m_wnelAddon->stopWallpaper();
+    }
+    
+    // Launch multi-monitor setup
+    if (m_wallpaperManager && !m_wallpaperManager->launchMultiMonitorWallpaper(assignments)) {
+        QMessageBox::critical(this, "Launch Failed",
+            "Failed to launch multi-monitor wallpaper setup. Check the log for details.");
+        return;
+    }
+    
+    // Save assignments
+    m_config.setMultiMonitorScreenAssignments(assignments);
+    
+    // Update button states to enable Stop Wallpaper button
+    updatePlaylistButtonStates();
+    
+    m_statusLabel->setText(QString("Multi-monitor setup applied to %1 screens").arg(assignments.size()));
 }
 
 void MainWindow::onWallpaperHiddenToggled(const WallpaperInfo& wallpaper, bool hidden)

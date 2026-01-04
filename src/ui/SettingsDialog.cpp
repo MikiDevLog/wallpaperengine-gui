@@ -19,6 +19,7 @@
 #include <QSlider>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QInputDialog>
 #include <QStandardPaths>
 #include <QDir>
 #include <QProcess>
@@ -56,6 +57,9 @@ void SettingsDialog::setupUI()
     
     // Create Engine Defaults tab
     tabWidget->addTab(createEngineDefaultsTab(), "Engine Defaults");
+    
+    // Create Multi-Monitor tab
+    tabWidget->addTab(createMultiMonitorTab(), "Multi-Monitor");
     
     // Create Extra tab
     tabWidget->addTab(createExtraTab(), "Extra");
@@ -810,6 +814,94 @@ QWidget* SettingsDialog::createExtraTab()
     return widget;
 }
 
+QWidget* SettingsDialog::createMultiMonitorTab()
+{
+    auto* widget = new QWidget;
+    auto* mainLayout = new QVBoxLayout(widget);
+    mainLayout->setContentsMargins(12, 12, 12, 12);
+    mainLayout->setSpacing(16);
+    
+    // Info label
+    auto* infoLabel = new QLabel(
+        "Multi-Monitor Mode allows you to display different wallpapers on each screen simultaneously.\n"
+        "Configure screen order and custom names below. When enabled, Playlist and External Wallpapers features will be disabled."
+    );
+    infoLabel->setWordWrap(true);
+    infoLabel->setStyleSheet("QLabel { color: #666; background: #f0f0f0; padding: 8px; border-radius: 4px; }");
+    mainLayout->addWidget(infoLabel);
+    
+    // Enable multi-monitor mode
+    m_multiMonitorModeCheckBox = new QCheckBox("Enable Multi-Monitor Mode");
+    m_multiMonitorModeCheckBox->setStyleSheet("QCheckBox { font-weight: bold; font-size: 11pt; }");
+    mainLayout->addWidget(m_multiMonitorModeCheckBox);
+    
+    // Status label
+    m_multiMonitorStatusLabel = new QLabel();
+    m_multiMonitorStatusLabel->setWordWrap(true);
+    mainLayout->addWidget(m_multiMonitorStatusLabel);
+    
+    // Screen configuration group
+    auto* screenGroup = new QGroupBox("Screen Configuration");
+    auto* screenLayout = new QHBoxLayout(screenGroup);
+    
+    // Screen list
+    m_screenListWidget = new QListWidget;
+    m_screenListWidget->setMinimumHeight(200);
+    screenLayout->addWidget(m_screenListWidget);
+    
+    // Control buttons
+    auto* buttonLayout = new QVBoxLayout;
+    
+    m_detectScreensButton = new QPushButton("Detect Screens");
+    m_detectScreensButton->setToolTip("Refresh the list of available screens");
+    buttonLayout->addWidget(m_detectScreensButton);
+    
+    buttonLayout->addSpacing(10);
+    
+    m_moveUpButton = new QPushButton("Move Up");
+    m_moveUpButton->setToolTip("Move selected screen up in the order");
+    buttonLayout->addWidget(m_moveUpButton);
+    
+    m_moveDownButton = new QPushButton("Move Down");
+    m_moveDownButton->setToolTip("Move selected screen down in the order");
+    buttonLayout->addWidget(m_moveDownButton);
+    
+    buttonLayout->addSpacing(10);
+    
+    m_renameButton = new QPushButton("Rename Screen");
+    m_renameButton->setToolTip("Set a custom name for the selected screen");
+    buttonLayout->addWidget(m_renameButton);
+    
+    buttonLayout->addStretch();
+    
+    screenLayout->addLayout(buttonLayout);
+    
+    mainLayout->addWidget(screenGroup);
+    
+    // Note about screen order
+    auto* noteLabel = new QLabel(
+        "Note: Screen order determines the numbering (Screen 1, Screen 2, etc.) used in the wallpaper assignment interface.\n"
+        "Custom names are for your convenience and will be displayed instead of technical names."
+    );
+    noteLabel->setWordWrap(true);
+    noteLabel->setStyleSheet("QLabel { font-size: 9pt; color: #888; font-style: italic; }");
+    mainLayout->addWidget(noteLabel);
+    
+    mainLayout->addStretch();
+    
+    // Connect signals
+    connect(m_multiMonitorModeCheckBox, &QCheckBox::toggled, this, &SettingsDialog::onMultiMonitorModeToggled);
+    connect(m_detectScreensButton, &QPushButton::clicked, this, &SettingsDialog::detectScreens);
+    connect(m_moveUpButton, &QPushButton::clicked, this, &SettingsDialog::onScreenMoveUp);
+    connect(m_moveDownButton, &QPushButton::clicked, this, &SettingsDialog::onScreenMoveDown);
+    connect(m_renameButton, &QPushButton::clicked, this, &SettingsDialog::onScreenRename);
+    
+    // Load current screen configuration
+    detectScreens();
+    
+    return widget;
+}
+
 void SettingsDialog::loadSettings()
 {
     // Paths
@@ -931,6 +1023,13 @@ void SettingsDialog::loadSettings()
     m_globalVerboseCheckBox->setChecked(m_config.globalVerbose());
     m_globalLogLevelCombo->setCurrentText(m_config.globalLogLevel());
     m_globalMpvOptionsEdit->setText(m_config.globalMpvOptions());
+    
+    // Load Multi-Monitor settings
+    m_multiMonitorModeCheckBox->setChecked(m_config.multiMonitorModeEnabled());
+    m_screenCustomNames = m_config.multiMonitorScreenNames();
+    m_screenOrder = m_config.multiMonitorScreenOrder();
+    refreshScreenList();
+    onMultiMonitorModeToggled(m_config.multiMonitorModeEnabled());
 }
 
 void SettingsDialog::saveSettings()
@@ -990,7 +1089,13 @@ void SettingsDialog::saveSettings()
     
     // WNEL-specific
     m_config.setGlobalNoLoop(m_globalNoLoopCheckBox->isChecked());
-    m_config.setGlobalNoHardwareDecode(m_globalNoHardwareDecodeCheckBox->isChecked());
+    
+    // Save Multi-Monitor settings
+    m_config.setMultiMonitorModeEnabled(m_multiMonitorModeCheckBox->isChecked());
+    m_config.setMultiMonitorScreenOrder(m_screenOrder);
+    m_config.setMultiMonitorScreenNames(m_screenCustomNames);
+    
+    // m_config.setGlobalNoHardwareDecode(m_globalNoHardwareDecodeCheckBox->isChecked());
     m_config.setGlobalForceX11(m_globalForceX11CheckBox->isChecked());
     m_config.setGlobalForceWayland(m_globalForceWaylandCheckBox->isChecked());
     m_config.setGlobalVerbose(m_globalVerboseCheckBox->isChecked());
@@ -1444,5 +1549,129 @@ void SettingsDialog::clearAllWallpaperSettings()
             QMessageBox::information(this, "Settings Cleared",
                 "No wallpaper settings directory found. Nothing to delete.");
         }
+    }
+}
+
+// Multi-Monitor tab slots
+void SettingsDialog::onMultiMonitorModeToggled(bool enabled)
+{
+    m_screenListWidget->setEnabled(enabled);
+    m_detectScreensButton->setEnabled(enabled);
+    m_moveUpButton->setEnabled(enabled);
+    m_moveDownButton->setEnabled(enabled);
+    m_renameButton->setEnabled(enabled);
+    
+    if (enabled) {
+        m_multiMonitorStatusLabel->setText(
+            "<b style='color: green;'>Multi-Monitor Mode: ENABLED</b><br>"
+            "Playlist and External Wallpapers features will be disabled when this mode is active."
+        );
+    } else {
+        m_multiMonitorStatusLabel->setText(
+            "<b style='color: gray;'>Multi-Monitor Mode: DISABLED</b>"
+        );
+    }
+}
+
+void SettingsDialog::detectScreens()
+{
+    QStringList detectedScreens;
+    QScreen* primaryScreen = qApp->primaryScreen();
+    
+    if (primaryScreen) {
+        detectedScreens << primaryScreen->name();
+    }
+    
+    for (QScreen* screen : qApp->screens()) {
+        if (screen != primaryScreen && !detectedScreens.contains(screen->name())) {
+            detectedScreens << screen->name();
+        }
+    }
+    
+    // Merge with existing order - keep order of known screens, add new ones at end
+    QStringList newOrder;
+    for (const QString& screen : m_screenOrder) {
+        if (detectedScreens.contains(screen)) {
+            newOrder << screen;
+            detectedScreens.removeOne(screen);
+        }
+    }
+    // Add newly detected screens
+    newOrder.append(detectedScreens);
+    
+    m_screenOrder = newOrder;
+    refreshScreenList();
+}
+
+void SettingsDialog::refreshScreenList()
+{
+    m_screenListWidget->clear();
+    
+    for (int i = 0; i < m_screenOrder.size(); ++i) {
+        const QString& technicalName = m_screenOrder[i];
+        QString displayName;
+        
+        if (m_screenCustomNames.contains(technicalName) && !m_screenCustomNames[technicalName].isEmpty()) {
+            displayName = QString("Screen %1: %2 (%3)")
+                .arg(i + 1)
+                .arg(m_screenCustomNames[technicalName])
+                .arg(technicalName);
+        } else {
+            displayName = QString("Screen %1: %2").arg(i + 1).arg(technicalName);
+        }
+        
+        QListWidgetItem* item = new QListWidgetItem(displayName);
+        item->setData(Qt::UserRole, technicalName);
+        m_screenListWidget->addItem(item);
+    }
+}
+
+void SettingsDialog::onScreenMoveUp()
+{
+    int currentRow = m_screenListWidget->currentRow();
+    if (currentRow <= 0 || currentRow >= m_screenOrder.size()) {
+        return;
+    }
+    
+    m_screenOrder.swapItemsAt(currentRow, currentRow - 1);
+    refreshScreenList();
+    m_screenListWidget->setCurrentRow(currentRow - 1);
+}
+
+void SettingsDialog::onScreenMoveDown()
+{
+    int currentRow = m_screenListWidget->currentRow();
+    if (currentRow < 0 || currentRow >= m_screenOrder.size() - 1) {
+        return;
+    }
+    
+    m_screenOrder.swapItemsAt(currentRow, currentRow + 1);
+    refreshScreenList();
+    m_screenListWidget->setCurrentRow(currentRow + 1);
+}
+
+void SettingsDialog::onScreenRename()
+{
+    int currentRow = m_screenListWidget->currentRow();
+    if (currentRow < 0 || currentRow >= m_screenOrder.size()) {
+        return;
+    }
+    
+    QString technicalName = m_screenOrder[currentRow];
+    QString currentName = m_screenCustomNames.value(technicalName, technicalName);
+    
+    bool ok;
+    QString newName = QInputDialog::getText(this, "Rename Screen",
+        QString("Enter custom name for screen '%1':").arg(technicalName),
+        QLineEdit::Normal, currentName, &ok);
+    
+    if (ok) {
+        if (newName.isEmpty() || newName == technicalName) {
+            m_screenCustomNames.remove(technicalName);
+        } else {
+            m_screenCustomNames[technicalName] = newName;
+        }
+        refreshScreenList();
+        m_screenListWidget->setCurrentRow(currentRow);
     }
 }

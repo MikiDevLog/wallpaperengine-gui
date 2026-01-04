@@ -882,6 +882,87 @@ void ConfigManager::setGlobalMpvOptions(const QString& options)
     m_settings->sync();
 }
 
+// Multi-Monitor Mode settings
+bool ConfigManager::multiMonitorModeEnabled() const
+{
+    return m_settings->value("multi_monitor/enabled", false).toBool();
+}
+
+void ConfigManager::setMultiMonitorModeEnabled(bool enabled)
+{
+    m_settings->setValue("multi_monitor/enabled", enabled);
+    m_settings->sync();
+}
+
+QStringList ConfigManager::multiMonitorScreenOrder() const
+{
+    return m_settings->value("multi_monitor/screen_order", QStringList()).toStringList();
+}
+
+void ConfigManager::setMultiMonitorScreenOrder(const QStringList& order)
+{
+    m_settings->setValue("multi_monitor/screen_order", order);
+    m_settings->sync();
+}
+
+QMap<QString, QString> ConfigManager::multiMonitorScreenNames() const
+{
+    QMap<QString, QString> names;
+    int size = m_settings->beginReadArray("multi_monitor/screen_names");
+    for (int i = 0; i < size; ++i) {
+        m_settings->setArrayIndex(i);
+        QString technical = m_settings->value("technical").toString();
+        QString custom = m_settings->value("custom").toString();
+        if (!technical.isEmpty()) {
+            names[technical] = custom;
+        }
+    }
+    m_settings->endArray();
+    return names;
+}
+
+void ConfigManager::setMultiMonitorScreenNames(const QMap<QString, QString>& names)
+{
+    m_settings->beginWriteArray("multi_monitor/screen_names");
+    int index = 0;
+    for (auto it = names.constBegin(); it != names.constEnd(); ++it) {
+        m_settings->setArrayIndex(index++);
+        m_settings->setValue("technical", it.key());
+        m_settings->setValue("custom", it.value());
+    }
+    m_settings->endArray();
+    m_settings->sync();
+}
+
+QMap<QString, QString> ConfigManager::multiMonitorScreenAssignments() const
+{
+    QMap<QString, QString> assignments;
+    int size = m_settings->beginReadArray("multi_monitor/screen_assignments");
+    for (int i = 0; i < size; ++i) {
+        m_settings->setArrayIndex(i);
+        QString screen = m_settings->value("screen").toString();
+        QString wallpaper = m_settings->value("wallpaper").toString();
+        if (!screen.isEmpty()) {
+            assignments[screen] = wallpaper;
+        }
+    }
+    m_settings->endArray();
+    return assignments;
+}
+
+void ConfigManager::setMultiMonitorScreenAssignments(const QMap<QString, QString>& assignments)
+{
+    m_settings->beginWriteArray("multi_monitor/screen_assignments");
+    int index = 0;
+    for (auto it = assignments.constBegin(); it != assignments.constEnd(); ++it) {
+        m_settings->setArrayIndex(index++);
+        m_settings->setValue("screen", it.key());
+        m_settings->setValue("wallpaper", it.value());
+    }
+    m_settings->endArray();
+    m_settings->sync();
+}
+
 // Generic settings access for custom configuration values
 QVariant ConfigManager::value(const QString& key, const QVariant& defaultValue) const
 {

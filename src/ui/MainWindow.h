@@ -28,6 +28,7 @@ class WallpaperManager;
 class WallpaperPlaylist;
 class PlaylistPreview;
 class WNELAddon;
+class ScreenSelectionWidget;
 struct WallpaperInfo;
 
 // Custom QTabWidget that accepts drops on tab buttons
@@ -126,6 +127,12 @@ private:
     void updateStatusBar();
     void showFirstRunDialog();
     
+    // Multi-Monitor mode methods
+    void onMultiMonitorModeChanged();
+    void onScreenSelectionChanged(const QString& technicalName);
+    void onMultiMonitorApply();
+    void updateMultiMonitorUI();
+    
     // System tray methods
     void setupSystemTray();
     void createTrayMenu();
@@ -140,6 +147,11 @@ private:
     // UI Components
     DropTabWidget* m_mainTabWidget;
     QSplitter *m_splitter;
+    
+    // Multi-Monitor UI components
+    ScreenSelectionWidget *m_screenSelectionWidget;
+    QPushButton *m_multiMonitorApplyButton;
+    
     QTabWidget *m_rightTabWidget;
     WallpaperPreview *m_wallpaperPreview;
     PropertiesPanel *m_propertiesPanel;

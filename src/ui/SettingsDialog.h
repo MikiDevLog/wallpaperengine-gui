@@ -57,6 +57,14 @@ private slots:
     // Engine Defaults tab slots
     void onGlobalSettingChanged();
     void resetGlobalEngineDefaults();
+    
+    // Multi-Monitor tab slots
+    void onMultiMonitorModeToggled(bool enabled);
+    void onScreenMoveUp();
+    void onScreenMoveDown();
+    void onScreenRename();
+    void refreshScreenList();
+    void detectScreens();
 
 private:
     void setupUI();
@@ -65,6 +73,7 @@ private:
     QWidget* createThemeTab();     // Method for Theme tab
     QWidget* createExtraTab();     // Method for Extra tab
     QWidget* createEngineDefaultsTab();  // Method for Engine Defaults tab
+    QWidget* createMultiMonitorTab();  // Method for Multi-Monitor tab
     void loadSettings();
     void saveSettings();
     void updateSteamStatus();
@@ -134,6 +143,17 @@ private:
     QCheckBox* m_globalVerboseCheckBox;
     QComboBox* m_globalLogLevelCombo;
     QLineEdit* m_globalMpvOptionsEdit;
+    
+    // Multi-Monitor tab components
+    QCheckBox* m_multiMonitorModeCheckBox;
+    QListWidget* m_screenListWidget;
+    QPushButton* m_moveUpButton;
+    QPushButton* m_moveDownButton;
+    QPushButton* m_renameButton;
+    QPushButton* m_detectScreensButton;
+    QLabel* m_multiMonitorStatusLabel;
+    QMap<QString, QString> m_screenCustomNames;  // Technical name -> Custom name
+    QStringList m_screenOrder;  // Ordered list of technical screen names
     
     // Configuration
     ConfigManager& m_config;

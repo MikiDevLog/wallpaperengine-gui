@@ -174,6 +174,10 @@ public:
     // Preview animation control for background optimization
     void stopAllPreviewAnimations();
     void startAllPreviewAnimations();
+    
+    // Multi-monitor mode control
+    void setDoubleClickEnabled(bool enabled);
+    void setApplyButtonEnabled(bool enabled);
 
     // Dynamic layout constants
     static constexpr int ITEMS_PER_PAGE = 20;
@@ -278,6 +282,9 @@ private:
     // Hidden wallpapers tracking
     QSet<QString> m_hiddenWallpapers;
     bool m_showHiddenWallpapers;
+    
+    // Multi-monitor mode control
+    bool m_doubleClickEnabled;
     
     // Helper methods
     void loadHiddenWallpapers();

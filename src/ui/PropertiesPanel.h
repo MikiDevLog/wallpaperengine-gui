@@ -97,6 +97,9 @@ public:
     
     // Tab interaction tracking
     bool isUserInteractingWithTabs() const { return m_userInteractingWithTabs; }
+    
+    // Multi-monitor mode
+    void setMultiMonitorMode(bool enabled);
 
 signals:
     void launchWallpaper(const WallpaperInfo& wallpaper);
@@ -236,6 +239,7 @@ private:
     bool m_propertiesModified;
     bool m_settingsModified;
     bool m_isWallpaperRunning;
+    bool m_isMultiMonitorMode;  // Track multi-monitor mode state
     
     // New member variables for unsaved changes handling
     bool m_ignoreTabChange;

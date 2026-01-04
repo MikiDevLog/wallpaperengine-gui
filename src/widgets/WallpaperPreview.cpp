@@ -1111,6 +1111,7 @@ WallpaperPreview::WallpaperPreview(QWidget* parent)
     , m_lastContainerWidth(0)
     , m_layoutUpdatePending(false)
     , m_showHiddenWallpapers(false)
+    , m_doubleClickEnabled(true)
 {
     setupUI();
     
@@ -1270,7 +1271,10 @@ void WallpaperPreview::onWallpaperItemClicked(const WallpaperInfo& wallpaper)
 
 void WallpaperPreview::onWallpaperItemDoubleClicked(const WallpaperInfo& wallpaper)
 {
-    emit wallpaperDoubleClicked(wallpaper);
+    // Only emit double-click signal if enabled (disabled in multi-monitor mode)
+    if (m_doubleClickEnabled) {
+        emit wallpaperDoubleClicked(wallpaper);
+    }
 }
 
 QList<WallpaperInfo> WallpaperPreview::getFilteredWallpapers() const
@@ -1914,6 +1918,18 @@ void WallpaperPreview::saveHiddenWallpapers()
     config.setValue("ui/hiddenWallpapers", hiddenList);
     
     qCDebug(wallpaperPreview) << "Saved" << m_hiddenWallpapers.size() << "hidden wallpapers to config";
+}
+
+void WallpaperPreview::setDoubleClickEnabled(bool enabled)
+{
+    m_doubleClickEnabled = enabled;
+}
+
+void WallpaperPreview::setApplyButtonEnabled(bool enabled)
+{
+    if (m_applyButton) {
+        m_applyButton->setEnabled(enabled);
+    }
 }
 
 // include the moc output for WallpaperPreview.h so staticMetaObject, vtables, signals, etc. are available

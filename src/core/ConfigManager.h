@@ -200,6 +200,16 @@ public:
     QString globalMpvOptions() const;
     void setGlobalMpvOptions(const QString& options);
     
+    // Multi-Monitor Mode settings
+    bool multiMonitorModeEnabled() const;
+    void setMultiMonitorModeEnabled(bool enabled);
+    QStringList multiMonitorScreenOrder() const;
+    void setMultiMonitorScreenOrder(const QStringList& order);
+    QMap<QString, QString> multiMonitorScreenNames() const;
+    void setMultiMonitorScreenNames(const QMap<QString, QString>& names);
+    QMap<QString, QString> multiMonitorScreenAssignments() const;
+    void setMultiMonitorScreenAssignments(const QMap<QString, QString>& assignments);
+    
     // Generic settings access for custom configuration values
     QVariant value(const QString& key, const QVariant& defaultValue = QVariant()) const;
     void setValue(const QString& key, const QVariant& value);

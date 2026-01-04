@@ -48,6 +48,7 @@ set(SOURCES
     # Custom widgets
     src/widgets/WallpaperPreview.cpp
     src/widgets/PlaylistPreview.cpp
+    src/widgets/ScreenSelectionWidget.cpp
     
     # Playlist functionality
     src/playlist/WallpaperPlaylist.cpp
@@ -74,6 +75,7 @@ set(HEADERS
     # Custom widgets
     src/widgets/WallpaperPreview.h
     src/widgets/PlaylistPreview.h
+    src/widgets/ScreenSelectionWidget.h
     
     # Playlist functionality
     src/playlist/WallpaperPlaylist.h
