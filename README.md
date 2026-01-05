@@ -1,12 +1,14 @@
 # WallpaperEngine GUI
 
 GUI for the [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine).
+
+
 Now has a pluggable addon [wallpaper_not-engine_linux](https://github.com/MikiDevLog/wallpaper_not-engine_linux).
-In short - will allow to run regular media files in full compatibility with regular wallpapers on x11 and Wayland too, just like in Wallpaper Engine (this feature is experemental due to lack of testing in different contitions, you can help with this, when you find any issue related to this addon, just submit it to [issues](https://github.com/MikiDevLog/wallpaper_not-engine_linux/issues))
+In short - will allow to run **regular media files as wallpapers** in full compatibility with regular wallpapers on x11 and Wayland too, just like in Wallpaper Engine (this feature is experemental due to lack of testing in different conditions/setups, you can help with this, when you find any issue related to this addon, just submit it to [issues](https://github.com/MikiDevLog/wallpaper_not-engine_linux/issues))
 - No need to transfer your pictures or videos to a separate folder, binding occurs via symlinks.
 - The interface does not change much, allowing to use both types of wallpapers.
 
-# Features
+# Features of GUI
 
 - Mostly automated first setup.
 - Can get information about wallpaper based on workshop id using Steam API and store it. [You need to get API key for that](https://steamcommunity.com/dev/apikey) any domain name will do.
@@ -15,7 +17,8 @@ In short - will allow to run regular media files in full compatibility with regu
 - Restore previous state on restart.
 - Global settings
 - Has playlist support
-- Has support for changing wallpaper properties that are specified in project.json with the ability to save them between launches and roll back to the default state **(realy depends on linux-wallpaperengine since it wont support every wallpaper as of now, and some wallpaper wont react to any change at all since they use advnaced WE specific features that are not implemented currently)**
+- Multimonitor mode
+- Has support for changing wallpaper properties that are specified in project.json with the ability to save them between launches and roll back to the default state **(realy depends on linux-wallpaperengine since it wont support every wallpaper as of now, and some wallpapers won't react to any change at all since they use advnaced WE specific features that are not implemented currently)**
 - Has support for individual settings (settings specific to linux-wallpaperengine) for running wallpapers
 - Has support for working in the system tray
 
@@ -173,6 +176,6 @@ src/
 
 ### TODO
 
-1. Add multimonitor mode
+1. Add multimonitor mode (mainly done, but testing is not fully completed, participants needed)
 2. Release rpm apt and other packages for the application
 3. Focus on QoL features if any will be suggested
