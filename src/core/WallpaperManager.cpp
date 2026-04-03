@@ -440,7 +440,7 @@ bool WallpaperManager::launchMultiMonitorWallpaper(const QMap<QString, QString>&
     if (scaling != "default") args << "--scaling" << scaling;
     
     QString clamping = config.globalClamping();
-    if (clamping != "clamp") args << "--clamping" << clamping;
+    if (clamping != "clamp") args << "--clamp" << clamping;
     
     // Add global behavior settings
     if (config.globalDisableMouse()) args << "--disable-mouse";

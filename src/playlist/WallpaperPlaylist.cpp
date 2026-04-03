@@ -378,7 +378,7 @@ QStringList WallpaperPlaylist::loadWallpaperSettings(const QString& wallpaperId)
             if (scaling != "default") args << "--scaling" << scaling;
             
             QString clamping = settings["clamping"].toString();
-            if (clamping != "clamp") args << "--clamping" << clamping;
+            if (clamping != "clamp") args << "--clamp" << clamping;
             
             if (settings["disableMouse"].toBool()) args << "--disable-mouse";
             if (settings["disableParallax"].toBool()) args << "--disable-parallax";
@@ -405,7 +405,7 @@ QStringList WallpaperPlaylist::loadWallpaperSettings(const QString& wallpaperId)
         if (scaling != "default") args << "--scaling" << scaling;
         
         QString clamping = config.globalClamping();
-        if (clamping != "clamp") args << "--clamping" << clamping;
+        if (clamping != "clamp") args << "--clamp" << clamping;
         
         if (config.globalNoAutoMute()) args << "--noautomute";
         if (config.globalDisableMouse()) args << "--disable-mouse";

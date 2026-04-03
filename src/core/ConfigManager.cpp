@@ -764,9 +764,9 @@ QString ConfigManager::globalClamping() const
     return m_settings->value("engine_defaults/clamping", "clamp").toString();
 }
 
-void ConfigManager::setGlobalClamping(const QString& clamping)
+void ConfigManager::setGlobalClamping(const QString& clamp)
 {
-    m_settings->setValue("engine_defaults/clamping", clamping);
+    m_settings->setValue("engine_defaults/clamping", clamp);
     m_settings->sync();
 }
 

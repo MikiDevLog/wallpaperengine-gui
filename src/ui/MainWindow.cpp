@@ -1526,7 +1526,7 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
                     if (scaling != "default") additionalArgs << "--scaling" << scaling;
                     
                     QString clamping = settings["clamping"].toString();
-                    if (clamping != "clamp") additionalArgs << "--clamping" << clamping;
+                    if (clamping != "clamp") additionalArgs << "--clamp" << clamping;
                     
                     if (settings["disableMouse"].toBool()) additionalArgs << "--disable-mouse";
                     if (settings["disableParallax"].toBool()) additionalArgs << "--disable-parallax";
@@ -1561,7 +1561,7 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
                 if (scaling != "default") additionalArgs << "--scaling" << scaling;
                 
                 QString clamping = config.globalClamping();
-                if (clamping != "clamp") additionalArgs << "--clamping" << clamping;
+                if (clamping != "clamp") additionalArgs << "--clamp" << clamping;
                 
                 if (config.globalNoAutoMute()) additionalArgs << "--noautomute";
                 if (config.globalDisableMouse()) additionalArgs << "--disable-mouse";
