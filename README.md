@@ -39,7 +39,7 @@ You need binary (~/build/output/linux-wallpaperengine) compiled. Go to link abov
 ### Fedora / RHEL / CentOS
 ```bash
 # Install development tools
-sudo dnf groupinstall "Development Tools"
+sudo dnf group install development-tools
 sudo dnf install cmake gcc-c++
 
 # Install Qt6 dependencies
