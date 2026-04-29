@@ -66,6 +66,10 @@ public:
     // Methods for system tray
     void setStartMinimized(bool minimized);
 
+public slots:
+    // Called when another instance requests focus (single-instance handling).
+    void handleFocusRequest(const QString &message);
+
 protected:
     void closeEvent(QCloseEvent *event) override;
     void changeEvent(QEvent *event) override;

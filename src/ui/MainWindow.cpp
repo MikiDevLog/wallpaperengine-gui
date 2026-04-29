@@ -744,6 +744,30 @@ void MainWindow::setStartMinimized(bool minimized)
     }
 }
 
+void MainWindow::handleFocusRequest(const QString &message)
+{
+    Q_UNUSED(message);
+    qCInfo(mainWindow) << "Received focus request from another instance";
+
+    // Restore window if minimized
+    if (isMinimized()) {
+        showNormal();
+    }
+
+    // Make sure the window is visible
+    if (isHidden()) {
+        show();
+    }
+
+    // Bring to front and activate
+    raise();
+    activateWindow();
+
+    // Ensure it's on top of other windows
+    setWindowState(windowState() & ~Qt::WindowMinimized);
+    showNormal();
+}
+
 void MainWindow::setupSystemTray()
 {
     // Check if system tray is available

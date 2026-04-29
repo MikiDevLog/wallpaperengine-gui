@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include "ui/MainWindow.h"
 #include "core/ConfigManager.h"
+#include "core/SingleApplication.h"
 
 // Logging categories
 Q_LOGGING_CATEGORY(appMain, "app.main")
@@ -152,40 +153,52 @@ int main(int argc, char *argv[])
         showSudoWarning();
         return 1;
     }
-    
+
+    // Create QApplication FIRST — SingleApplication needs qApp to be valid.
     QApplication app(argc, argv);
-    
+
+    // Set up application metadata (needed by SingleApplication for server name)
+    setupApplicationMetadata();
+
     // Parse command line arguments early to check for debug flag
     QCommandLineParser parser;
     parser.setApplicationDescription("GUI for linux-wallpaperengine");
     parser.addHelpOption();
     parser.addVersionOption();
-    
+
     QCommandLineOption debugOption(QStringList() << "d" << "debug",
         "Enable debug output");
     parser.addOption(debugOption);
-    
+
     QCommandLineOption configOption(QStringList() << "c" << "config",
         "Use custom config file", "config");
     parser.addOption(configOption);
-    
+
     QCommandLineOption minimizedOption(QStringList() << "m" << "minimized",
         "Start minimized to system tray");
     parser.addOption(minimizedOption);
-    
+
     parser.process(app);
-    
+
     // Set up logging with debug flag if provided
     bool debugEnabled = parser.isSet(debugOption);
     setupLogging(debugEnabled);
-    
+
     if (debugEnabled) {
         qCDebug(appMain) << "Debug logging enabled via --debug flag";
     } else {
         qCInfo(appMain) << "Running with minimal logging (use --debug for verbose output)";
     }
-    
-    qCInfo(appMain) << "Starting" << QApplication::applicationDisplayName() 
+
+    // Single-instance check: if another copy is already running, bring it to
+    // focus instead of launching a duplicate.
+    SingleApplication singleApp;
+    if (!singleApp.isFirstInstance()) {
+        qCInfo(appMain) << "Another instance is already running — focusing its window";
+        return 0;
+    }
+
+    qCInfo(appMain) << "Starting" << QApplication::applicationDisplayName()
                     << "version" << QApplication::applicationVersion();
     
     // Install improved message handler that filters Qt noise
@@ -262,9 +275,6 @@ int main(int argc, char *argv[])
         }
     });
     
-    // Set up application metadata
-    setupApplicationMetadata();
-    
     qCDebug(appMain) << "Creating config directory";
     // Create necessary directories
     createConfigDirectory();
@@ -289,7 +299,11 @@ int main(int argc, char *argv[])
     qCDebug(appMain) << "Creating main window";
     // Create and show main window
     MainWindow window;
-    
+
+    // When another instance requests focus, bring this window to front.
+    QObject::connect(&singleApp, &SingleApplication::messageReceived,
+                     &window, &MainWindow::handleFocusRequest);
+
     // Check if application should start minimized
     bool startMinimized = parser.isSet(minimizedOption);
     window.setStartMinimized(startMinimized);

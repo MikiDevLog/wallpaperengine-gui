@@ -35,6 +35,7 @@ set(SOURCES
     # Core components
     src/core/ConfigManager.cpp
     src/core/WallpaperManager.cpp
+    src/core/SingleApplication.cpp
     
     # Steam integration
     src/steam/SteamDetector.cpp
@@ -62,6 +63,7 @@ set(HEADERS
     # Core components
     src/core/ConfigManager.h
     src/core/WallpaperManager.h
+    src/core/SingleApplication.h
     
     # Steam integration
     src/steam/SteamDetector.h
