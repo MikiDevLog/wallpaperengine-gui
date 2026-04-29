@@ -119,8 +119,7 @@ install(TARGETS wallpaperengine-gui
     RUNTIME DESTINATION bin
 )
 
-# Desktop file
-set(ICON_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/share/pixmaps")
+# Generate desktop files from templates (no @ICON_INSTALL_DIR@ needed anymore)
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/desktop/wallpaperengine-gui.desktop.in
     ${CMAKE_CURRENT_BINARY_DIR}/wallpaperengine-gui.desktop
@@ -153,16 +152,10 @@ install(FILES resources/icons/wallpaper-engine.svg
     OPTIONAL
 )
 
-install(FILES resources/icons/wallpaper-engine.png
+install(FILES resources/icons/wallpaper.png
     DESTINATION share/icons/hicolor/64x64/apps
     RENAME wallpaperengine-gui.png
     OPTIONAL
-)
-
-# Fallback icon installation
-install(FILES resources/icons/wallpaper-engine.png
-    DESTINATION ${ICON_INSTALL_DIR}
-    RENAME wallpaperengine-gui.png
 )
 
 # Optional Papirus theme integration

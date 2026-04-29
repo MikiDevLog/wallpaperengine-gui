@@ -112,7 +112,9 @@ static void setupApplicationMetadata()
     QApplication::setApplicationVersion("1.1.0");
     QApplication::setOrganizationName("WallpaperEngine");
     QApplication::setOrganizationDomain("wallpaperengine.io");
-    QApplication::setDesktopFileName("wallpaperengine-gui");
+    // QApplication::setDesktopFileName("wallpaperengine-gui");
+    // Only needed if the app is installed with a .desktop file in /usr/share/applications/
+    // Without it, XDG Desktop Portal registration fails for uninstalled builds.
 }
 
 static void setupApplicationStyle(QApplication &app)

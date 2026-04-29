@@ -19,12 +19,14 @@ static QString getUserName()
 SingleApplication::SingleApplication(QObject *parent)
     : QObject(parent)
 {
-    // Build a unique server name: app_name + user so multiple users on the same
-    // machine can each run their own instance independently.
-    const QString baseName = qApp->applicationName();
+    // Build a unique server name using a stable internal identifier rather than
+    // qApp->applicationName(), which can differ between build-dir and installed
+    // runs (setApplicationName vs. WMClass/desktop file).  This keeps single-
+    // instance detection working regardless of how the app is launched.
+    const QString appId = "wallpaperengine-gui";
 
     m_serverName = QCryptographicHash::hash(
-            (baseName + ":" + getUserName()).toUtf8(),
+            (appId + ":" + getUserName()).toUtf8(),
             QCryptographicHash::Sha256)
             .toBase64();
 
